@@ -4,6 +4,7 @@ import { manuscriptCharacters, manuscriptDisplayCells, manuscriptPages, pageTota
 
 type Theme = 'system' | 'light' | 'dark'
 type PaperId = 'b5' | 'a4'
+type PaperOrientation = 'portrait' | 'landscape'
 type CompositionId = '20x20' | '20x25' | '25x20'
 type Status = { tone: 'success' | 'error'; message: string } | null
 type LanguagePreference = Language | 'system'
@@ -31,6 +32,7 @@ const compositions: Record<CompositionId, { characters: number; lines: number }>
 const languageOptions = ['ja', 'system', 'en'] as const
 const themeOptions = ['light', 'system', 'dark'] as const
 const directionOptions = ['vertical', 'horizontal'] as const
+const paperOrientationOptions = ['portrait', 'landscape'] as const
 
 function stored<T>(key: string, fallback: T): T {
   try { return (localStorage.getItem(key) as T) || fallback } catch { return fallback }
@@ -55,6 +57,14 @@ function DirectionControl({ value, onChange, labels }: { value: Direction; onCha
   return <div className="segmented" role="radiogroup" aria-label={labels.direction}>
     {directionOptions.map((direction) => <button key={direction} type="button" role="radio" tabIndex={value === direction ? 0 : -1} aria-checked={value === direction} className={value === direction ? 'selected' : ''} onClick={() => onChange(direction)} onKeyDown={(event) => moveRadio(event, directionOptions, value, onChange)}>
       {direction === 'vertical' ? labels.vertical : labels.horizontal}
+    </button>)}
+  </div>
+}
+
+function PaperOrientationControl({ value, onChange, labels, labelId }: { value: PaperOrientation; onChange: (orientation: PaperOrientation) => void; labels: Labels; labelId: string }) {
+  return <div className="paper-orientation" role="radiogroup" aria-labelledby={labelId}>
+    {paperOrientationOptions.map((orientation) => <button key={orientation} type="button" role="radio" tabIndex={value === orientation ? 0 : -1} aria-checked={value === orientation} className={value === orientation ? 'selected' : ''} onClick={() => onChange(orientation)} onKeyDown={(event) => moveRadio(event, paperOrientationOptions, value, onChange)}>
+      {orientation === 'portrait' ? labels.portrait : labels.landscape}
     </button>)}
   </div>
 }
@@ -88,17 +98,39 @@ function ThemeToggle({ value, onChange, labels }: { value: Theme; onChange: (the
   </div>
 }
 
-function ManuscriptPage({ direction, paper, composition, cells, page, total, fontFamily, fontSize, margin, lineSpacing, letterSpacing, gridColor, showServiceMark, labels, language }: { direction: Direction; paper: PaperId; composition: CompositionId; cells: ManuscriptCell[]; page: number; total: number; fontFamily: string; fontSize: string; margin: string; lineSpacing: string; letterSpacing: string; gridColor: string; showServiceMark: boolean; labels: Labels; language: Language }) {
+function ManuscriptPage({ direction, paper, paperOrientation, composition, cells, page, total, fontFamily, fontSize, margin, gridColor, showServiceMark, labels, language }: { direction: Direction; paper: PaperId; paperOrientation: PaperOrientation; composition: CompositionId; cells: ManuscriptCell[]; page: number; total: number; fontFamily: string; fontSize: string; margin: string; gridColor: string; showServiceMark: boolean; labels: Labels; language: Language }) {
   const layout = compositions[composition]
   const hasText = cells.some((cell) => cell !== null)
   const paperName = papers[paper][language]
+  const paperDimensions = paperOrientation === 'landscape' ? { width: papers[paper].height, height: papers[paper].width } : papers[paper]
   const columns = direction === 'vertical' ? layout.lines : layout.characters
   const rows = direction === 'vertical' ? layout.characters : layout.lines
   const displayCells = manuscriptDisplayCells(cells, layout, direction)
+  const leftColumns = Math.floor(layout.lines / 2)
+  const verticalRows = Array.from({ length: layout.characters }, (_, row) => displayCells.slice(row * layout.lines, (row + 1) * layout.lines))
+  const leftCells = verticalRows.flatMap((row) => row.slice(0, leftColumns))
+  const rightCells = verticalRows.flatMap((row) => row.slice(leftColumns))
+  const topRows = Math.floor(layout.lines / 2)
+  const topCells = displayCells.slice(0, topRows * layout.characters)
+  const bottomCells = displayCells.slice(topRows * layout.characters)
+  const verticalSpread = direction === 'vertical' && paperOrientation === 'landscape'
+  const horizontalSpread = direction === 'horizontal' && paperOrientation === 'portrait'
   return <section className="paper-wrap" aria-label={labels.preview}>
-    <div className="paper-meta">{paperName} / {direction === 'vertical' ? labels.vertical : labels.horizontal} / {layout.characters}{labels.characters} × {layout.lines}{labels.lines}</div>
-    <div className={`paper page-${paper} direction-${direction} family-${fontFamily} font-${fontSize} margin-${margin} spacing-${lineSpacing} tracking-${letterSpacing} ${showServiceMark ? 'has-service-mark' : ''}`} style={{ '--columns': columns, '--rows': rows, '--paper-line': gridColor } as React.CSSProperties}>
-      <div className="manuscript-grid" aria-label={hasText ? `${labels.sourceCount} ${manuscriptCharacters(cells.join('')).length}${labels.sourceSuffix}` : labels.blank}>{displayCells.map((cell, index) => <span key={index} className="manuscript-cell">{cell}</span>)}</div>
+    <div className="paper-meta">{paperName} / {direction === 'vertical' ? labels.vertical : labels.horizontal} / {paperOrientation === 'portrait' ? labels.portrait : labels.landscape} / {layout.characters}{labels.characters} × {layout.lines}{labels.lines}</div>
+    <div className={`paper page-${paper} orientation-${paperOrientation} direction-${direction} family-${fontFamily} font-${fontSize} margin-${margin} ${showServiceMark ? 'has-service-mark' : ''}`} style={{ '--columns': columns, '--rows': rows, '--paper-line': gridColor, '--paper-width': paperDimensions.width, '--paper-height': paperDimensions.height } as React.CSSProperties}>
+      {verticalSpread
+        ? <div className="manuscript-grid vertical-manuscript-grid" aria-label={hasText ? `${labels.sourceCount} ${manuscriptCharacters(cells.join('')).length}${labels.sourceSuffix}` : labels.blank}>
+            <div className="manuscript-half" style={{ '--half-columns': leftColumns, '--rows': rows } as React.CSSProperties}>{leftCells.map((cell, index) => <span key={index} className="manuscript-cell">{cell}</span>)}</div>
+            <div className="manuscript-spine" aria-hidden="true"><span className="fish-tail fish-tail-top" /><span className="fish-tail fish-tail-bottom" /></div>
+            <div className="manuscript-half" style={{ '--half-columns': layout.lines - leftColumns, '--rows': rows } as React.CSSProperties}>{rightCells.map((cell, index) => <span key={index} className="manuscript-cell">{cell}</span>)}</div>
+          </div>
+        : horizontalSpread
+          ? <div className="manuscript-grid horizontal-manuscript-grid" aria-label={hasText ? `${labels.sourceCount} ${manuscriptCharacters(cells.join('')).length}${labels.sourceSuffix}` : labels.blank}>
+              <div className="manuscript-half horizontal-manuscript-half" style={{ '--columns': layout.characters, '--half-rows': topRows } as React.CSSProperties}>{topCells.map((cell, index) => <span key={index} className="manuscript-cell">{cell}</span>)}</div>
+              <div className="manuscript-spine horizontal-manuscript-spine" aria-hidden="true" />
+              <div className="manuscript-half horizontal-manuscript-half" style={{ '--columns': layout.characters, '--half-rows': layout.lines - topRows } as React.CSSProperties}>{bottomCells.map((cell, index) => <span key={index} className="manuscript-cell">{cell}</span>)}</div>
+            </div>
+        : <div className="manuscript-grid" aria-label={hasText ? `${labels.sourceCount} ${manuscriptCharacters(cells.join('')).length}${labels.sourceSuffix}` : labels.blank}>{displayCells.map((cell, index) => <span key={index} className="manuscript-cell">{cell}</span>)}</div>}
       {!hasText && <p className="empty-paper">{labels.blank}</p>}
       {showServiceMark && <span className="service-mark" aria-hidden="true">{labels.serviceName}</span>}
     </div>
@@ -113,12 +145,11 @@ export default function App() {
   const [text, setText] = useState('')
   const [direction, setDirection] = useState<Direction>('vertical')
   const [paper, setPaper] = useState<PaperId>('b5')
+  const [paperOrientation, setPaperOrientation] = useState<PaperOrientation>('landscape')
   const [composition, setComposition] = useState<CompositionId>('20x20')
   const [fontFamily, setFontFamily] = useState('mincho')
   const [fontSize, setFontSize] = useState('normal')
   const [margin, setMargin] = useState('standard')
-  const [lineSpacing, setLineSpacing] = useState('standard')
-  const [letterSpacing, setLetterSpacing] = useState('standard')
   const [gridColor, setGridColor] = useState('#c9ad97')
   const [autoParagraphIndent, setAutoParagraphIndent] = useState(true)
   const [showServiceMark, setShowServiceMark] = useState(true)
@@ -131,6 +162,11 @@ export default function App() {
   const layoutOptions = useMemo(() => ({ autoParagraphIndent }), [autoParagraphIndent])
   const totalPages = useMemo(() => pageTotal(text, compositions[composition], layoutOptions), [text, composition, layoutOptions])
   const pages = useMemo(() => manuscriptPages(text, compositions[composition], layoutOptions), [text, composition, layoutOptions])
+
+  const selectDirection = (nextDirection: Direction) => {
+    setDirection(nextDirection)
+    setPaperOrientation(nextDirection === 'vertical' ? 'landscape' : 'portrait')
+  }
 
   useEffect(() => {
     localStorage.setItem('kantan:language-preference', languagePreference)
@@ -161,7 +197,7 @@ export default function App() {
     setPending('pdf')
     try {
       const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')])
-      const selectedPaper = papers[paper]
+      const selectedPaper = paperOrientation === 'landscape' ? { width: papers[paper].height, height: papers[paper].width } : papers[paper]
       const doc = new jsPDF({ orientation: selectedPaper.width > selectedPaper.height ? 'landscape' : 'portrait', unit: 'mm', format: [selectedPaper.width, selectedPaper.height] })
       const paperElements = Array.from(previewRef.current.querySelectorAll<HTMLElement>('.paper'))
       for (const [index, paperElement] of paperElements.entries()) {
@@ -205,7 +241,7 @@ export default function App() {
           <p className="source-count" aria-live="polite">{labels.sourceCount} {sourceCharacters}{language === 'ja' ? labels.sourceSuffix : ` ${labels.sourceSuffix}`} / {totalPages} {labels.pages}</p>
         </div>
 
-        <fieldset className="field-group direction-field"><legend>{labels.direction}</legend><DirectionControl value={direction} onChange={setDirection} labels={labels} /></fieldset>
+        <fieldset className="field-group direction-field"><legend>{labels.direction}</legend><DirectionControl value={direction} onChange={selectDirection} labels={labels} /></fieldset>
         <div className="field-group"><label htmlFor="paper">{labels.paper}</label><select id="paper" value={paper} onChange={(event) => setPaper(event.target.value as PaperId)}>{Object.entries(papers).map(([id, item]) => <option key={id} value={id}>{item[language]}</option>)}</select></div>
         <div className="field-group"><label htmlFor="composition">{labels.composition}</label><select id="composition" value={composition} onChange={(event) => setComposition(event.target.value as CompositionId)}>{Object.entries(compositions).map(([id, item]) => <option key={id} value={id}>{item.characters}{labels.characters} × {item.lines}{labels.lines}</option>)}</select></div>
 
@@ -215,9 +251,8 @@ export default function App() {
             <label>{labels.fontFamily}<select value={fontFamily} onChange={(event) => setFontFamily(event.target.value)}><option value="mincho">{labels.mincho}</option><option value="gothic">{labels.gothic}</option></select></label>
             <label>{labels.fontSize}<select value={fontSize} onChange={(event) => setFontSize(event.target.value)}><option value="small">{labels.small}</option><option value="normal">{labels.medium}</option><option value="large">{labels.large}</option></select></label>
             <label>{labels.margin}<select value={margin} onChange={(event) => setMargin(event.target.value)}><option value="narrow">{labels.marginNarrow}</option><option value="standard">{labels.standard}</option><option value="wide">{labels.marginWidePrint}</option></select></label>
-            <label>{labels.lineSpacing}<select value={lineSpacing} onChange={(event) => setLineSpacing(event.target.value)}><option value="tight">{labels.tight}</option><option value="standard">{labels.standard}</option><option value="roomy">{labels.roomy}</option></select></label>
-            <label>{labels.letterSpacing}<select value={letterSpacing} onChange={(event) => setLetterSpacing(event.target.value)}><option value="tight">{labels.tight}</option><option value="standard">{labels.standard}</option><option value="roomy">{labels.roomy}</option></select></label>
             <label>{labels.gridColor}<span className="color-control"><input aria-label={labels.gridColor} type="color" value={gridColor} onChange={(event) => setGridColor(event.target.value)} /><output>{gridColor}</output></span></label>
+            <div className="paper-orientation-control"><span id="paper-orientation-label">{labels.paperOrientation}</span><PaperOrientationControl value={paperOrientation} onChange={setPaperOrientation} labels={labels} labelId="paper-orientation-label" /></div>
             <label className="mark-control"><input type="checkbox" checked={autoParagraphIndent} onChange={(event) => setAutoParagraphIndent(event.target.checked)} /><span>{labels.paragraphIndent}</span></label>
             <label className="mark-control"><input type="checkbox" checked={showServiceMark} onChange={(event) => setShowServiceMark(event.target.checked)} /><span>{labels.serviceMark}</span></label>
           </div>
@@ -231,9 +266,14 @@ export default function App() {
 
       <section className="preview-panel" aria-label={labels.preview}>
         <div className="preview-heading"><h1>{labels.preview}</h1><InfoButton label={labels.info} content={labels.settingsInfo} /></div>
-        <div className="preview-capture" ref={previewRef}>{pages.map((cells, index) => <ManuscriptPage key={index} direction={direction} paper={paper} composition={composition} cells={cells} page={index + 1} total={pages.length} fontFamily={fontFamily} fontSize={fontSize} margin={margin} lineSpacing={lineSpacing} letterSpacing={letterSpacing} gridColor={gridColor} showServiceMark={showServiceMark} labels={labels} language={language} />)}</div>
+        <div className="preview-capture" ref={previewRef}>{pages.map((cells, index) => <ManuscriptPage key={index} direction={direction} paper={paper} paperOrientation={paperOrientation} composition={composition} cells={cells} page={index + 1} total={pages.length} fontFamily={fontFamily} fontSize={fontSize} margin={margin} gridColor={gridColor} showServiceMark={showServiceMark} labels={labels} language={language} />)}</div>
       </section>
     </div>
+
+    <footer className="site-footer">
+      <span>{labels.copyright}</span>
+      <a href={`mailto:${labels.contact}`}>{labels.contact}</a>
+    </footer>
 
     {status && <div className={`toast ${status.tone}`} role="status"><span>{status.message}</span>{status.tone === 'error' && <button type="button" className="toast-retry" onClick={savePdf}>{labels.retry}</button>}<button type="button" aria-label={labels.close} onClick={() => setStatus(null)}>×</button></div>}
   </main>

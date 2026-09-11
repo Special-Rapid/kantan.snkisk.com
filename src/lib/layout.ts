@@ -17,7 +17,6 @@ export const manuscriptCharacters = (text: string) =>
 
 /**
  * CSSの右から左への自動配置に依存せず、縦書きの先頭列を右端に固定する。
- * これにより、文字／行の間隔を変えても左右端のマス幅が不均一にならない。
  */
 export const manuscriptDisplayCells = (cells: ManuscriptCell[], composition: Composition, direction: Direction): ManuscriptCell[] => {
   if (direction === 'horizontal') return cells
