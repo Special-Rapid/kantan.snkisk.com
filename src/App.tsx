@@ -120,6 +120,7 @@ export default function App() {
   const [lineSpacing, setLineSpacing] = useState('standard')
   const [letterSpacing, setLetterSpacing] = useState('standard')
   const [gridColor, setGridColor] = useState('#c9ad97')
+  const [autoParagraphIndent, setAutoParagraphIndent] = useState(true)
   const [showServiceMark, setShowServiceMark] = useState(true)
   const [pending, setPending] = useState<'pdf' | 'print' | null>(null)
   const [status, setStatus] = useState<Status>(null)
@@ -127,8 +128,9 @@ export default function App() {
   const language = languagePreference === 'system' ? defaultLanguage() : languagePreference
   const labels: Labels = copy[language]
   const sourceCharacters = useMemo(() => manuscriptCharacters(text).length, [text])
-  const totalPages = useMemo(() => pageTotal(text, compositions[composition]), [text, composition])
-  const pages = useMemo(() => manuscriptPages(text, compositions[composition]), [text, composition])
+  const layoutOptions = useMemo(() => ({ autoParagraphIndent }), [autoParagraphIndent])
+  const totalPages = useMemo(() => pageTotal(text, compositions[composition], layoutOptions), [text, composition, layoutOptions])
+  const pages = useMemo(() => manuscriptPages(text, compositions[composition], layoutOptions), [text, composition, layoutOptions])
 
   useEffect(() => {
     localStorage.setItem('kantan:language-preference', languagePreference)
@@ -216,6 +218,7 @@ export default function App() {
             <label>{labels.lineSpacing}<select value={lineSpacing} onChange={(event) => setLineSpacing(event.target.value)}><option value="tight">{labels.tight}</option><option value="standard">{labels.standard}</option><option value="roomy">{labels.roomy}</option></select></label>
             <label>{labels.letterSpacing}<select value={letterSpacing} onChange={(event) => setLetterSpacing(event.target.value)}><option value="tight">{labels.tight}</option><option value="standard">{labels.standard}</option><option value="roomy">{labels.roomy}</option></select></label>
             <label>{labels.gridColor}<span className="color-control"><input aria-label={labels.gridColor} type="color" value={gridColor} onChange={(event) => setGridColor(event.target.value)} /><output>{gridColor}</output></span></label>
+            <label className="mark-control"><input type="checkbox" checked={autoParagraphIndent} onChange={(event) => setAutoParagraphIndent(event.target.checked)} /><span>{labels.paragraphIndent}</span></label>
             <label className="mark-control"><input type="checkbox" checked={showServiceMark} onChange={(event) => setShowServiceMark(event.target.checked)} /><span>{labels.serviceMark}</span></label>
           </div>
         </details>

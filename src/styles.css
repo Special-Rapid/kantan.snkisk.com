@@ -43,7 +43,7 @@ textarea { min-height: 348px; padding: var(--space-3); line-height: 1.75; resize
 .color-control { display: flex; align-items: center; gap: 6px; min-height: 42px; padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); color: var(--ink); }
 .color-control input { width: 28px; height: 28px; padding: 0; border: 0; background: transparent; cursor: pointer; }
 .color-control output { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
-.mark-control { grid-column: span 2; grid-template-columns: auto 1fr; align-items: center; min-height: 42px; padding: 8px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); color: var(--ink) !important; }
+.mark-control { grid-column: span 3; grid-template-columns: auto 1fr; align-items: center; min-height: 42px; padding: 8px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); color: var(--ink) !important; }
 .mark-control input { width: 18px; height: 18px; margin: 0; accent-color: var(--ink); }
 .action-group { display: grid; gap: var(--space-2); }
 .button { min-height: 54px; border-radius: var(--radius); cursor: pointer; font-weight: 750; font-size: 16px; }

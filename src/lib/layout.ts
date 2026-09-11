@@ -7,6 +7,11 @@ export interface Composition {
 
 export type ManuscriptCell = string | null
 
+export interface ManuscriptLayoutOptions {
+  /** 段落境界を1マス下げて組む。入力本文そのものは変更しない。 */
+  autoParagraphIndent?: boolean
+}
+
 export const manuscriptCharacters = (text: string) =>
   Array.from(text.replaceAll(/\r\n?|\n/g, ''))
 
@@ -31,7 +36,7 @@ export const pageCapacity = ({ characters, lines }: Composition) => characters *
  * 改行は次の行を始める指示として扱い、通常の空白は原稿用紙の一文字として残す。
  * 空セルも返すため、段落の改行をプレビューとPDFで同じ位置に再現できる。
  */
-export const manuscriptPages = (text: string, composition: Composition): ManuscriptCell[][] => {
+const legacyManuscriptPages = (text: string, composition: Composition): ManuscriptCell[][] => {
   const capacity = pageCapacity(composition)
   const pages: ManuscriptCell[][] = []
   let cells: ManuscriptCell[] = Array(capacity).fill(null)
@@ -69,7 +74,52 @@ export const manuscriptPages = (text: string, composition: Composition): Manuscr
   return pages
 }
 
-export const pageTotal = (text: string, composition: Composition) => manuscriptPages(text, composition).length
+/**
+ * 改行の数や行頭空白の有無にかかわらず、貼り付け元の段落を同じ見た目にそろえる。
+ * 連続改行と段落先頭の空白を一つの境界へ畳むため、字下げは必ず一マスだけになる。
+ */
+const paragraphIndentedPages = (text: string, composition: Composition): ManuscriptCell[][] => {
+  const capacity = pageCapacity(composition)
+  const pages: ManuscriptCell[][] = []
+  let cells: ManuscriptCell[] = Array(capacity).fill(null)
+  let cursor = 0
+  const paragraphs = text
+    .replaceAll(/\r\n?|\n/g, '\n')
+    .split(/\n+/)
+    .map((paragraph) => paragraph.replace(/^[ \t　]+/, ''))
+    .filter((paragraph) => paragraph.length > 0)
 
-export const pageCharacters = (text: string, composition: Composition, page = 0) =>
-  manuscriptPages(text, composition)[page] ?? Array(pageCapacity(composition)).fill(null)
+  const finishPage = () => {
+    pages.push(cells)
+    cells = Array(capacity).fill(null)
+    cursor = 0
+  }
+
+  const startParagraph = () => {
+    if (cursor % composition.characters !== 0) {
+      cursor = Math.ceil(cursor / composition.characters) * composition.characters
+    }
+    if (cursor === capacity) finishPage()
+    cursor += 1
+  }
+
+  for (const paragraph of paragraphs) {
+    startParagraph()
+    for (const character of Array.from(paragraph)) {
+      if (cursor === capacity) finishPage()
+      cells[cursor] = character
+      cursor += 1
+    }
+  }
+
+  pages.push(cells)
+  return pages
+}
+
+export const manuscriptPages = (text: string, composition: Composition, options: ManuscriptLayoutOptions = {}): ManuscriptCell[][] =>
+  options.autoParagraphIndent ? paragraphIndentedPages(text, composition) : legacyManuscriptPages(text, composition)
+
+export const pageTotal = (text: string, composition: Composition, options: ManuscriptLayoutOptions = {}) => manuscriptPages(text, composition, options).length
+
+export const pageCharacters = (text: string, composition: Composition, page = 0, options: ManuscriptLayoutOptions = {}) =>
+  manuscriptPages(text, composition, options)[page] ?? Array(pageCapacity(composition)).fill(null)
