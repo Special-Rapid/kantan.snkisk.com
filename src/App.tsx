@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { copy, type Labels, type Language } from './lib/copy'
 import { manuscriptCharacters, manuscriptDisplayCells, manuscriptPages, pageTotal, type Direction, type ManuscriptCell } from './lib/layout'
 
 type Theme = 'system' | 'light' | 'dark'
 type PaperId = 'b5' | 'a4'
 type PaperOrientation = 'portrait' | 'landscape'
-type CompositionId = '20x20' | '20x25' | '25x20'
+type CompositionId = '10x20' | '14x14' | '16x25' | '20x10' | '20x20' | '20x25' | '25x16' | '25x20' | '30x40' | '40x30' | '40x40'
 type Status = { tone: 'success' | 'error'; message: string } | null
 type LanguagePreference = Language | 'system'
 
@@ -25,9 +25,17 @@ const papers: Record<PaperId, { ja: string; en: string; width: number; height: n
 }
 
 const compositions: Record<CompositionId, { characters: number; lines: number }> = {
+  '10x20': { characters: 10, lines: 20 },
+  '14x14': { characters: 14, lines: 14 },
+  '20x10': { characters: 20, lines: 10 },
   '20x20': { characters: 20, lines: 20 },
+  '16x25': { characters: 16, lines: 25 },
+  '25x16': { characters: 25, lines: 16 },
   '20x25': { characters: 20, lines: 25 },
   '25x20': { characters: 25, lines: 20 },
+  '30x40': { characters: 30, lines: 40 },
+  '40x30': { characters: 40, lines: 30 },
+  '40x40': { characters: 40, lines: 40 },
 }
 const languageOptions = ['ja', 'system', 'en'] as const
 const themeOptions = ['light', 'system', 'dark'] as const
@@ -80,6 +88,85 @@ function moveRadio<T extends string>(event: React.KeyboardEvent<HTMLButtonElemen
   event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus()
 }
 
+const lineBandRatio = 0.16
+const spineBandRatio = 1.2
+
+function compositionLabel(layout: { characters: number; lines: number }, labels: Labels, language: Language) {
+  const capacity = layout.characters * layout.lines
+  return language === 'ja'
+    ? `${layout.characters}${labels.characters} × ${layout.lines}${labels.lines}（${capacity}字詰め）`
+    : `${layout.characters} ${labels.characters} × ${layout.lines} ${labels.lines} (${capacity}-character grid)`
+}
+
+function useGridMetrics({ direction, columns, rows, verticalSpread, horizontalSpread }: { direction: Direction; columns: number; rows: number; verticalSpread: boolean; horizontalSpread: boolean }) {
+  const frameRef = useRef<HTMLDivElement>(null)
+  const [cellSize, setCellSize] = useState(1)
+
+  useLayoutEffect(() => {
+    const frame = frameRef.current
+    if (!frame) return
+
+    const update = () => {
+      const width = frame.clientWidth
+      const height = frame.clientHeight
+      if (width === 0 || height === 0) return
+      const leftColumns = Math.floor(columns / 2)
+      const topRows = Math.floor(rows / 2)
+      const verticalBands = verticalSpread
+        ? Math.max(leftColumns - 1, 0) + Math.max(columns - leftColumns - 1, 0)
+        : Math.max(columns - 1, 0)
+      const horizontalBands = horizontalSpread
+        ? Math.max(topRows - 1, 0) + Math.max(rows - topRows - 1, 0)
+        : Math.max(rows - 1, 0)
+      const fitCellSize = (available: number, cells: number, bands: number, hasSpine: boolean) => {
+        let lower = 0
+        let upper = available
+        for (let index = 0; index < 32; index += 1) {
+          const candidate = (lower + upper) / 2
+          const used = cells * candidate + bands * Math.max(1, candidate * lineBandRatio) + (hasSpine ? Math.max(1, candidate * spineBandRatio) : 0)
+          if (used <= available) lower = candidate
+          else upper = candidate
+        }
+        return lower
+      }
+      const widthSize = direction === 'vertical'
+        ? fitCellSize(width - 2, columns, verticalBands, verticalSpread)
+        : (width - 2) / columns
+      const heightSize = direction === 'horizontal'
+        ? fitCellSize(height - 2, rows, horizontalBands, horizontalSpread)
+        : (height - 2) / rows
+      const nextSize = Math.max(1, Math.floor(Math.min(widthSize, heightSize) * 100) / 100)
+      setCellSize((current) => Math.abs(current - nextSize) < 0.01 ? current : nextSize)
+    }
+
+    let animationFrame = 0
+    const schedule = () => {
+      window.cancelAnimationFrame(animationFrame)
+      animationFrame = window.requestAnimationFrame(update)
+    }
+    const observer = new ResizeObserver(schedule)
+    observer.observe(frame)
+    window.addEventListener('beforeprint', schedule)
+    window.addEventListener('afterprint', schedule)
+    schedule()
+    return () => {
+      window.cancelAnimationFrame(animationFrame)
+      observer.disconnect()
+      window.removeEventListener('beforeprint', schedule)
+      window.removeEventListener('afterprint', schedule)
+    }
+  }, [columns, direction, horizontalSpread, rows, verticalSpread])
+
+  return {
+    frameRef,
+    style: {
+      '--cell-size': `${cellSize}px`,
+      '--line-band-size': `${Math.max(1, cellSize * lineBandRatio)}px`,
+      '--spine-band-size': `${Math.max(1, cellSize * spineBandRatio)}px`,
+    } as React.CSSProperties,
+  }
+}
+
 function LanguageToggle({ value, onChange, labels }: { value: LanguagePreference; onChange: (language: LanguagePreference) => void; labels: Labels }) {
   return <div className={`language-toggle mode-${value}`} role="radiogroup" aria-label={labels.language}>
     <span className="language-indicator" aria-hidden="true" />
@@ -115,25 +202,28 @@ function ManuscriptPage({ direction, paper, paperOrientation, composition, cells
   const bottomCells = displayCells.slice(topRows * layout.characters)
   const verticalSpread = direction === 'vertical' && paperOrientation === 'landscape'
   const horizontalSpread = direction === 'horizontal' && paperOrientation === 'portrait'
+  const gridMetrics = useGridMetrics({ direction, columns, rows, verticalSpread, horizontalSpread })
   return <section className="paper-wrap" aria-label={labels.preview}>
-    <div className="paper-meta">{paperName} / {direction === 'vertical' ? labels.vertical : labels.horizontal} / {paperOrientation === 'portrait' ? labels.portrait : labels.landscape} / {layout.characters}{labels.characters} × {layout.lines}{labels.lines}</div>
-    <div className={`paper page-${paper} orientation-${paperOrientation} direction-${direction} family-${fontFamily} font-${fontSize} margin-${margin} ${showServiceMark ? 'has-service-mark' : ''}`} style={{ '--columns': columns, '--rows': rows, '--paper-line': gridColor, '--paper-width': paperDimensions.width, '--paper-height': paperDimensions.height } as React.CSSProperties}>
-      {verticalSpread
-        ? <div className="manuscript-grid vertical-manuscript-grid" aria-label={hasText ? `${labels.sourceCount} ${manuscriptCharacters(cells.join('')).length}${labels.sourceSuffix}` : labels.blank}>
+    <div className="paper-meta">{paperName} / {direction === 'vertical' ? labels.vertical : labels.horizontal} / {paperOrientation === 'portrait' ? labels.portrait : labels.landscape} / {compositionLabel(layout, labels, language)}</div>
+    <div className={`paper page-${paper} orientation-${paperOrientation} direction-${direction} family-${fontFamily} font-${fontSize} margin-${margin} ${showServiceMark ? 'has-service-mark' : ''}`} style={{ '--columns': columns, '--rows': rows, '--paper-line': gridColor, '--paper-width': paperDimensions.width, '--paper-height': paperDimensions.height, ...gridMetrics.style } as React.CSSProperties}>
+      <div className="manuscript-grid-frame" ref={gridMetrics.frameRef}>
+        {verticalSpread
+          ? <div className="manuscript-grid vertical-manuscript-grid" aria-label={hasText ? `${labels.sourceCount} ${manuscriptCharacters(cells.join('')).length}${labels.sourceSuffix}` : labels.blank}>
             <div className="manuscript-half" style={{ '--half-columns': leftColumns, '--rows': rows } as React.CSSProperties}>{leftCells.map((cell, index) => <span key={index} className="manuscript-cell">{cell}</span>)}</div>
             <div className="manuscript-spine" aria-hidden="true">
               <svg className="fish-tail" viewBox="0 0 20 10" focusable="false"><path d="M1 1h18v7C14.5 4.8 5.5 4.8 1 8Z" /></svg>
               <span className="spine-guide" />
             </div>
             <div className="manuscript-half" style={{ '--half-columns': layout.lines - leftColumns, '--rows': rows } as React.CSSProperties}>{rightCells.map((cell, index) => <span key={index} className="manuscript-cell">{cell}</span>)}</div>
-          </div>
-        : horizontalSpread
-          ? <div className="manuscript-grid horizontal-manuscript-grid" aria-label={hasText ? `${labels.sourceCount} ${manuscriptCharacters(cells.join('')).length}${labels.sourceSuffix}` : labels.blank}>
+            </div>
+          : horizontalSpread
+            ? <div className="manuscript-grid horizontal-manuscript-grid" aria-label={hasText ? `${labels.sourceCount} ${manuscriptCharacters(cells.join('')).length}${labels.sourceSuffix}` : labels.blank}>
               <div className="manuscript-half horizontal-manuscript-half" style={{ '--columns': layout.characters, '--half-rows': topRows } as React.CSSProperties}>{topCells.map((cell, index) => <span key={index} className="manuscript-cell">{cell}</span>)}</div>
               <div className="manuscript-spine horizontal-manuscript-spine" aria-hidden="true" />
               <div className="manuscript-half horizontal-manuscript-half" style={{ '--columns': layout.characters, '--half-rows': layout.lines - topRows } as React.CSSProperties}>{bottomCells.map((cell, index) => <span key={index} className="manuscript-cell">{cell}</span>)}</div>
-            </div>
-        : <div className="manuscript-grid" aria-label={hasText ? `${labels.sourceCount} ${manuscriptCharacters(cells.join('')).length}${labels.sourceSuffix}` : labels.blank}>{displayCells.map((cell, index) => <span key={index} className="manuscript-cell">{cell}</span>)}</div>}
+              </div>
+            : <div className="manuscript-grid" aria-label={hasText ? `${labels.sourceCount} ${manuscriptCharacters(cells.join('')).length}${labels.sourceSuffix}` : labels.blank}>{displayCells.map((cell, index) => <span key={index} className="manuscript-cell">{cell}</span>)}</div>}
+      </div>
       {!hasText && <p className="empty-paper">{labels.blank}</p>}
       {showServiceMark && <span className="service-mark" aria-hidden="true">{labels.serviceName}</span>}
     </div>
@@ -246,7 +336,7 @@ export default function App() {
 
         <fieldset className="field-group direction-field"><legend>{labels.direction}</legend><DirectionControl value={direction} onChange={selectDirection} labels={labels} /></fieldset>
         <div className="field-group"><label htmlFor="paper">{labels.paper}</label><select id="paper" value={paper} onChange={(event) => setPaper(event.target.value as PaperId)}>{Object.entries(papers).map(([id, item]) => <option key={id} value={id}>{item[language]}</option>)}</select></div>
-        <div className="field-group"><label htmlFor="composition">{labels.composition}</label><select id="composition" value={composition} onChange={(event) => setComposition(event.target.value as CompositionId)}>{Object.entries(compositions).map(([id, item]) => <option key={id} value={id}>{item.characters}{labels.characters} × {item.lines}{labels.lines}</option>)}</select></div>
+        <div className="field-group"><label htmlFor="composition">{labels.composition}</label><select id="composition" value={composition} onChange={(event) => setComposition(event.target.value as CompositionId)}>{Object.entries(compositions).map(([id, item]) => <option key={id} value={id}>{compositionLabel(item, labels, language)}</option>)}</select></div>
 
         <details className="optional-settings">
           <summary>{labels.details}</summary>
