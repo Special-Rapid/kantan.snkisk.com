@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { copy, type Labels, type Language } from './lib/copy'
 import { manuscriptCharacters, manuscriptDisplayCells, manuscriptPages, pageTotal, type Direction, type ManuscriptCell } from './lib/layout'
+import { gridMetricsForFrame } from './lib/grid-metrics'
 
 type Theme = 'system' | 'light' | 'dark'
 type PaperId = 'b5' | 'a4'
@@ -88,9 +89,6 @@ function moveRadio<T extends string>(event: React.KeyboardEvent<HTMLButtonElemen
   event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus()
 }
 
-const lineBandRatio = 0.16
-const spineBandRatio = 1.2
-
 function compositionLabel(layout: { characters: number; lines: number }, labels: Labels, language: Language) {
   const capacity = layout.characters * layout.lines
   return language === 'ja'
@@ -100,7 +98,7 @@ function compositionLabel(layout: { characters: number; lines: number }, labels:
 
 function useGridMetrics({ direction, columns, rows, verticalSpread, horizontalSpread }: { direction: Direction; columns: number; rows: number; verticalSpread: boolean; horizontalSpread: boolean }) {
   const frameRef = useRef<HTMLDivElement>(null)
-  const [cellSize, setCellSize] = useState(1)
+  const [metrics, setMetrics] = useState({ cellSize: 1, lineBandSize: 0, spineBandSize: 0 })
 
   useLayoutEffect(() => {
     const frame = frameRef.current
@@ -110,33 +108,13 @@ function useGridMetrics({ direction, columns, rows, verticalSpread, horizontalSp
       const width = frame.clientWidth
       const height = frame.clientHeight
       if (width === 0 || height === 0) return
-      const leftColumns = Math.floor(columns / 2)
-      const topRows = Math.floor(rows / 2)
-      const verticalBands = verticalSpread
-        ? Math.max(leftColumns - 1, 0) + Math.max(columns - leftColumns - 1, 0)
-        : Math.max(columns - 1, 0)
-      const horizontalBands = horizontalSpread
-        ? Math.max(topRows - 1, 0) + Math.max(rows - topRows - 1, 0)
-        : Math.max(rows - 1, 0)
-      const fitCellSize = (available: number, cells: number, bands: number, hasSpine: boolean) => {
-        let lower = 0
-        let upper = available
-        for (let index = 0; index < 32; index += 1) {
-          const candidate = (lower + upper) / 2
-          const used = cells * candidate + bands * Math.max(1, candidate * lineBandRatio) + (hasSpine ? Math.max(1, candidate * spineBandRatio) : 0)
-          if (used <= available) lower = candidate
-          else upper = candidate
-        }
-        return lower
-      }
-      const widthSize = direction === 'vertical'
-        ? fitCellSize(width - 2, columns, verticalBands, verticalSpread)
-        : (width - 2) / columns
-      const heightSize = direction === 'horizontal'
-        ? fitCellSize(height - 2, rows, horizontalBands, horizontalSpread)
-        : (height - 2) / rows
-      const nextSize = Math.max(1, Math.floor(Math.min(widthSize, heightSize) * 100) / 100)
-      setCellSize((current) => Math.abs(current - nextSize) < 0.01 ? current : nextSize)
+      const next = gridMetricsForFrame({ direction, columns, rows, verticalSpread, horizontalSpread, width, height })
+      if (!next) return
+      setMetrics((current) => (
+        Math.abs(current.cellSize - next.cellSize) < 0.01
+        && Math.abs(current.lineBandSize - next.lineBandSize) < 0.01
+        && Math.abs(current.spineBandSize - next.spineBandSize) < 0.01
+      ) ? current : next)
     }
 
     let animationFrame = 0
@@ -160,9 +138,9 @@ function useGridMetrics({ direction, columns, rows, verticalSpread, horizontalSp
   return {
     frameRef,
     style: {
-      '--cell-size': `${cellSize}px`,
-      '--line-band-size': `${Math.max(1, cellSize * lineBandRatio)}px`,
-      '--spine-band-size': `${Math.max(1, cellSize * spineBandRatio)}px`,
+      '--cell-size': `${metrics.cellSize}px`,
+      '--line-band-size': `${metrics.lineBandSize}px`,
+      '--spine-band-size': `${metrics.spineBandSize}px`,
     } as React.CSSProperties,
   }
 }
