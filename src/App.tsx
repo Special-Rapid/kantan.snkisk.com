@@ -6,6 +6,7 @@ type Theme = 'system' | 'light' | 'dark'
 type PaperId = 'b5' | 'a4'
 type CompositionId = '20x20' | '20x25' | '25x20'
 type Status = { tone: 'success' | 'error'; message: string } | null
+type LanguagePreference = Language | 'system'
 
 const defaultLanguage = (): Language => {
   const locales = navigator.languages?.length ? navigator.languages : [navigator.language]
@@ -27,9 +28,19 @@ const compositions: Record<CompositionId, { characters: number; lines: number }>
   '20x25': { characters: 20, lines: 25 },
   '25x20': { characters: 25, lines: 20 },
 }
+const languageOptions = ['ja', 'system', 'en'] as const
+const themeOptions = ['light', 'system', 'dark'] as const
+const directionOptions = ['vertical', 'horizontal'] as const
 
 function stored<T>(key: string, fallback: T): T {
   try { return (localStorage.getItem(key) as T) || fallback } catch { return fallback }
+}
+
+function initialLanguagePreference(): LanguagePreference {
+  const preference = stored<string>('kantan:language-preference', '')
+  if (preference === 'ja' || preference === 'en' || preference === 'system') return preference
+  const legacyLanguage = stored<string>('kantan:language', '')
+  return legacyLanguage === 'ja' || legacyLanguage === 'en' ? legacyLanguage : 'system'
 }
 
 function InfoButton({ label, content }: { label: string; content: string }) {
@@ -42,8 +53,37 @@ function InfoButton({ label, content }: { label: string; content: string }) {
 
 function DirectionControl({ value, onChange, labels }: { value: Direction; onChange: (direction: Direction) => void; labels: Labels }) {
   return <div className="segmented" role="radiogroup" aria-label={labels.direction}>
-    {(['vertical', 'horizontal'] as const).map((direction) => <button key={direction} type="button" role="radio" aria-checked={value === direction} className={value === direction ? 'selected' : ''} onClick={() => onChange(direction)}>
+    {directionOptions.map((direction) => <button key={direction} type="button" role="radio" tabIndex={value === direction ? 0 : -1} aria-checked={value === direction} className={value === direction ? 'selected' : ''} onClick={() => onChange(direction)} onKeyDown={(event) => moveRadio(event, directionOptions, value, onChange)}>
       {direction === 'vertical' ? labels.vertical : labels.horizontal}
+    </button>)}
+  </div>
+}
+
+function moveRadio<T extends string>(event: React.KeyboardEvent<HTMLButtonElement>, options: readonly T[], value: T, onChange: (value: T) => void) {
+  const current = options.indexOf(value)
+  const next = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? (current + options.length - 1) % options.length
+    : event.key === 'ArrowRight' || event.key === 'ArrowDown' ? (current + 1) % options.length
+      : event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1 : null
+  if (next === null) return
+  event.preventDefault()
+  onChange(options[next])
+  event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus()
+}
+
+function LanguageToggle({ value, onChange, labels }: { value: LanguagePreference; onChange: (language: LanguagePreference) => void; labels: Labels }) {
+  return <div className={`language-toggle mode-${value}`} role="radiogroup" aria-label={labels.language}>
+    <span className="language-indicator" aria-hidden="true" />
+    {languageOptions.map((option) => <button key={option} type="button" role="radio" tabIndex={value === option ? 0 : -1} aria-checked={value === option} className={value === option ? 'selected' : ''} onClick={() => onChange(option)} onKeyDown={(event) => moveRadio(event, languageOptions, value, onChange)}>
+      {option === 'ja' ? labels.japanese : option === 'system' ? labels.system : labels.english}
+    </button>)}
+  </div>
+}
+
+function ThemeToggle({ value, onChange, labels }: { value: Theme; onChange: (theme: Theme) => void; labels: Labels }) {
+  return <div className={`theme-toggle mode-${value}`} role="radiogroup" aria-label={labels.appearance}>
+    <span className="theme-indicator" aria-hidden="true" />
+    {themeOptions.map((option) => <button key={option} type="button" role="radio" tabIndex={value === option ? 0 : -1} aria-checked={value === option} className={value === option ? 'selected' : ''} onClick={() => onChange(option)} onKeyDown={(event) => moveRadio(event, themeOptions, value, onChange)}>
+      {option === 'light' ? labels.light : option === 'system' ? labels.system : labels.dark}
     </button>)}
   </div>
 }
@@ -67,7 +107,7 @@ function ManuscriptPage({ direction, paper, composition, cells, page, total, fon
 }
 
 export default function App() {
-  const [language, setLanguage] = useState<Language>(() => stored('kantan:language', defaultLanguage()))
+  const [languagePreference, setLanguagePreference] = useState<LanguagePreference>(initialLanguagePreference)
   const [theme, setTheme] = useState<Theme>(() => stored('kantan:theme', 'system'))
   const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
   const [text, setText] = useState('')
@@ -84,15 +124,17 @@ export default function App() {
   const [pending, setPending] = useState<'pdf' | 'print' | null>(null)
   const [status, setStatus] = useState<Status>(null)
   const previewRef = useRef<HTMLDivElement>(null)
+  const language = languagePreference === 'system' ? defaultLanguage() : languagePreference
   const labels: Labels = copy[language]
   const sourceCharacters = useMemo(() => manuscriptCharacters(text).length, [text])
   const totalPages = useMemo(() => pageTotal(text, compositions[composition]), [text, composition])
   const pages = useMemo(() => manuscriptPages(text, compositions[composition]), [text, composition])
 
   useEffect(() => {
-    localStorage.setItem('kantan:language', language)
+    localStorage.setItem('kantan:language-preference', languagePreference)
+    if (languagePreference !== 'system') localStorage.setItem('kantan:language', languagePreference)
     document.documentElement.lang = language
-  }, [language])
+  }, [language, languagePreference])
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
@@ -147,6 +189,10 @@ export default function App() {
   return <main className="app-shell">
     <header className="site-header">
       <a className="brand" href="/" aria-label="kantan home">kantan</a>
+      <div className="header-preferences">
+        <LanguageToggle value={languagePreference} onChange={setLanguagePreference} labels={labels} />
+        <ThemeToggle value={theme} onChange={setTheme} labels={labels} />
+      </div>
     </header>
 
     <div className="workspace">
@@ -171,8 +217,6 @@ export default function App() {
             <label>{labels.letterSpacing}<select value={letterSpacing} onChange={(event) => setLetterSpacing(event.target.value)}><option value="tight">{labels.tight}</option><option value="standard">{labels.standard}</option><option value="roomy">{labels.roomy}</option></select></label>
             <label>{labels.gridColor}<span className="color-control"><input aria-label={labels.gridColor} type="color" value={gridColor} onChange={(event) => setGridColor(event.target.value)} /><output>{gridColor}</output></span></label>
             <label className="mark-control"><input type="checkbox" checked={showServiceMark} onChange={(event) => setShowServiceMark(event.target.checked)} /><span>{labels.serviceMark}</span></label>
-            <label>{labels.language}<select value={language} onChange={(event) => setLanguage(event.target.value as Language)}><option value="ja">日本語</option><option value="en">English</option></select></label>
-            <label>{labels.appearance}<select value={theme} onChange={(event) => setTheme(event.target.value as Theme)}><option value="system">{labels.system}</option><option value="light">{labels.light}</option><option value="dark">{labels.dark}</option></select></label>
           </div>
         </details>
 
