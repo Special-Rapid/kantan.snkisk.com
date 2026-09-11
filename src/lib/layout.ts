@@ -10,6 +10,21 @@ export type ManuscriptCell = string | null
 export const manuscriptCharacters = (text: string) =>
   Array.from(text.replaceAll(/\r\n?|\n/g, ''))
 
+/**
+ * CSSの右から左への自動配置に依存せず、縦書きの先頭列を右端に固定する。
+ * これにより、文字／行の間隔を変えても左右端のマス幅が不均一にならない。
+ */
+export const manuscriptDisplayCells = (cells: ManuscriptCell[], composition: Composition, direction: Direction): ManuscriptCell[] => {
+  if (direction === 'horizontal') return cells
+
+  return Array.from({ length: cells.length }, (_, visualIndex) => {
+    const visualRow = Math.floor(visualIndex / composition.lines)
+    const visualColumn = visualIndex % composition.lines
+    const sourceIndex = (composition.lines - 1 - visualColumn) * composition.characters + visualRow
+    return cells[sourceIndex] ?? null
+  })
+}
+
 export const pageCapacity = ({ characters, lines }: Composition) => characters * lines
 
 /**

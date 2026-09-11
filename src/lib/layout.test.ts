@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { manuscriptCharacters, manuscriptPages, pageTotal } from './layout'
+import { manuscriptCharacters, manuscriptDisplayCells, manuscriptPages, pageTotal } from './layout'
 
 describe('原稿用紙の計算', () => {
   const composition = { characters: 2, lines: 2 }
@@ -40,5 +40,13 @@ describe('原稿用紙の計算', () => {
 
   it('満ページ直後の改行では次ページの先頭から続ける', () => {
     expect(manuscriptPages('あいうえ\nお', composition)[1]).toEqual(['お', null, null, null])
+  })
+
+  it('縦書きは先頭列を右端から均一に配置する', () => {
+    expect(manuscriptDisplayCells(['あ', 'い', 'う', 'え'], composition, 'vertical')).toEqual(['う', 'あ', 'え', 'い'])
+  })
+
+  it('横書きは入力順をそのまま表示する', () => {
+    expect(manuscriptDisplayCells(['あ', 'い', 'う', 'え'], composition, 'horizontal')).toEqual(['あ', 'い', 'う', 'え'])
   })
 })

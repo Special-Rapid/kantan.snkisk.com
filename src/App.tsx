@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { copy, type Labels, type Language } from './lib/copy'
-import { manuscriptCharacters, manuscriptPages, pageTotal, type Direction, type ManuscriptCell } from './lib/layout'
+import { manuscriptCharacters, manuscriptDisplayCells, manuscriptPages, pageTotal, type Direction, type ManuscriptCell } from './lib/layout'
 
 type Theme = 'system' | 'light' | 'dark'
 type PaperId = 'b5' | 'a4'
@@ -16,8 +16,6 @@ const defaultLanguage = (): Language => {
   }
   return 'ja'
 }
-
-const sampleText = `春の朝、私はいつもの道を歩いた。\nやわらかな光が、木々のあいだから差し込み、道ばたの草花をやさしく照らしていた。\n\nふと立ち止まると、どこからか鳥の声が聞こえてくる。\nそれは、急かすでもなく、悲しむでもなく、ただ、そこにある一日のはじまりを告げているようだった。\n\n私は今日も歩く。\n同じようでいて、決して同じではない、この一日を大切にしながら。`
 
 const papers: Record<PaperId, { ja: string; en: string; width: number; height: number }> = {
   b5: { ja: 'B5（182 × 257 mm）', en: 'B5 (182 × 257 mm)', width: 182, height: 257 },
@@ -56,10 +54,11 @@ function ManuscriptPage({ direction, paper, composition, cells, page, total, fon
   const paperName = papers[paper][language]
   const columns = direction === 'vertical' ? layout.lines : layout.characters
   const rows = direction === 'vertical' ? layout.characters : layout.lines
+  const displayCells = manuscriptDisplayCells(cells, layout, direction)
   return <section className="paper-wrap" aria-label={labels.preview}>
     <div className="paper-meta">{paperName} / {direction === 'vertical' ? labels.vertical : labels.horizontal} / {layout.characters}{labels.characters} × {layout.lines}{labels.lines}</div>
     <div className={`paper page-${paper} direction-${direction} family-${fontFamily} font-${fontSize} margin-${margin} spacing-${lineSpacing} tracking-${letterSpacing} ${showServiceMark ? 'has-service-mark' : ''}`} style={{ '--columns': columns, '--rows': rows, '--paper-line': gridColor } as React.CSSProperties}>
-      <div className="manuscript-grid" aria-label={hasText ? `${labels.sourceCount} ${manuscriptCharacters(cells.join('')).length}${labels.sourceSuffix}` : labels.blank}>{cells.map((cell, index) => <span key={index} className="manuscript-cell">{cell}</span>)}</div>
+      <div className="manuscript-grid" aria-label={hasText ? `${labels.sourceCount} ${manuscriptCharacters(cells.join('')).length}${labels.sourceSuffix}` : labels.blank}>{displayCells.map((cell, index) => <span key={index} className="manuscript-cell">{cell}</span>)}</div>
       {!hasText && <p className="empty-paper">{labels.blank}</p>}
       {showServiceMark && <span className="service-mark" aria-hidden="true">{labels.serviceName}</span>}
     </div>
@@ -71,7 +70,7 @@ export default function App() {
   const [language, setLanguage] = useState<Language>(() => stored('kantan:language', defaultLanguage()))
   const [theme, setTheme] = useState<Theme>(() => stored('kantan:theme', 'system'))
   const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
-  const [text, setText] = useState(sampleText)
+  const [text, setText] = useState('')
   const [direction, setDirection] = useState<Direction>('vertical')
   const [paper, setPaper] = useState<PaperId>('b5')
   const [composition, setComposition] = useState<CompositionId>('20x20')
