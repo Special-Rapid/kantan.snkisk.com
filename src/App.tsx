@@ -121,7 +121,10 @@ function ManuscriptPage({ direction, paper, paperOrientation, composition, cells
       {verticalSpread
         ? <div className="manuscript-grid vertical-manuscript-grid" aria-label={hasText ? `${labels.sourceCount} ${manuscriptCharacters(cells.join('')).length}${labels.sourceSuffix}` : labels.blank}>
             <div className="manuscript-half" style={{ '--half-columns': leftColumns, '--rows': rows } as React.CSSProperties}>{leftCells.map((cell, index) => <span key={index} className="manuscript-cell">{cell}</span>)}</div>
-            <div className="manuscript-spine" aria-hidden="true"><span className="fish-tail fish-tail-top" /><span className="fish-tail fish-tail-bottom" /></div>
+            <div className="manuscript-spine" aria-hidden="true">
+              <svg className="fish-tail" viewBox="0 0 20 10" focusable="false"><path d="M1 1h18v7C14.5 4.8 5.5 4.8 1 8Z" /></svg>
+              <span className="spine-guide" />
+            </div>
             <div className="manuscript-half" style={{ '--half-columns': layout.lines - leftColumns, '--rows': rows } as React.CSSProperties}>{rightCells.map((cell, index) => <span key={index} className="manuscript-cell">{cell}</span>)}</div>
           </div>
         : horizontalSpread

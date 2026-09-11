@@ -74,10 +74,8 @@ textarea { min-height: 348px; padding: var(--space-3); line-height: 1.75; resize
 .vertical-manuscript-grid > * { grid-row: 1; }
 .manuscript-half { display: grid; min-width: 0; min-height: 0; grid-template-columns: repeat(var(--half-columns), minmax(0, 1fr)); grid-template-rows: repeat(var(--rows), minmax(0, 1fr)); gap: 1px; background: var(--paper-line); }
 .manuscript-spine { position: relative; border-inline: 1px solid var(--paper-line); background: #fff; }
-.fish-tail { position: absolute; left: 50%; width: 62%; height: 10px; border-block: 2px solid var(--paper-line); transform: translateX(-50%); }
-.fish-tail::before, .fish-tail::after { position: absolute; top: -2px; width: 52%; height: 10px; border-top: 2px solid var(--paper-line); content: ''; }
-.fish-tail::before { left: 0; transform: rotate(26deg); transform-origin: left top; }.fish-tail::after { right: 0; transform: rotate(-26deg); transform-origin: right top; }
-.fish-tail-top { top: 29%; }.fish-tail-bottom { bottom: 29%; transform: translateX(-50%) rotate(180deg); }
+.fish-tail { position: absolute; top: 18%; left: 50%; width: clamp(10px, 1.25vw, 14px); height: auto; fill: var(--paper-line); transform: translateX(-50%); }
+.spine-guide { position: absolute; top: 61%; left: 50%; width: clamp(9px, 1vw, 12px); border-top: 1.5px solid var(--paper-line); transform: translateX(-50%); }
 .horizontal-manuscript-grid { grid-template-rows: minmax(0, 1fr) 3.2% minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); column-gap: 0 !important; row-gap: 0 !important; border: 1px solid var(--paper-line); background: #fff; }
 .horizontal-manuscript-grid > * { grid-column: 1; }
 .horizontal-manuscript-half { grid-template-columns: repeat(var(--columns), minmax(0, 1fr)); grid-template-rows: repeat(var(--half-rows), minmax(0, 1fr)); }
