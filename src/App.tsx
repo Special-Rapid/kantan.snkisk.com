@@ -7,6 +7,7 @@ type Theme = 'system' | 'light' | 'dark'
 type PaperId = 'b5' | 'a4'
 type PaperOrientation = 'portrait' | 'landscape'
 type CompositionId = '10x20' | '14x14' | '16x25' | '20x10' | '20x20' | '20x25' | '25x16' | '25x20' | '30x40' | '40x30' | '40x40'
+type Margin = 'narrow' | 'standard' | 'wide' | 'custom'
 type Status = { tone: 'success' | 'error'; message: string } | null
 type LanguagePreference = Language | 'system'
 
@@ -42,6 +43,7 @@ const languageOptions = ['ja', 'system', 'en'] as const
 const themeOptions = ['light', 'system', 'dark'] as const
 const directionOptions = ['vertical', 'horizontal'] as const
 const paperOrientationOptions = ['portrait', 'landscape'] as const
+const marginPercentages: Record<Exclude<Margin, 'custom'>, number> = { narrow: 10, standard: 20, wide: 30 }
 
 function stored<T>(key: string, fallback: T): T {
   try { return (localStorage.getItem(key) as T) || fallback } catch { return fallback }
@@ -98,7 +100,7 @@ function compositionLabel(layout: { characters: number; lines: number }, labels:
 
 function useGridMetrics({ direction, columns, rows, verticalSpread, horizontalSpread }: { direction: Direction; columns: number; rows: number; verticalSpread: boolean; horizontalSpread: boolean }) {
   const frameRef = useRef<HTMLDivElement>(null)
-  const [metrics, setMetrics] = useState({ cellSize: 1, lineBandSize: 0, spineBandSize: 0 })
+  const [metrics, setMetrics] = useState({ cellSize: 1, lineBandSize: 0, crossBandSize: 0, spineBandSize: 0 })
 
   useLayoutEffect(() => {
     const frame = frameRef.current
@@ -110,9 +112,15 @@ function useGridMetrics({ direction, columns, rows, verticalSpread, horizontalSp
       if (width === 0 || height === 0) return
       const next = gridMetricsForFrame({ direction, columns, rows, verticalSpread, horizontalSpread, width, height })
       if (!next) return
+      const paper = frame.parentElement
+      paper?.style.setProperty('--cell-size', `${next.cellSize}px`)
+      paper?.style.setProperty('--line-band-size', `${next.lineBandSize}px`)
+      paper?.style.setProperty('--cross-band-size', `${next.crossBandSize}px`)
+      paper?.style.setProperty('--spine-band-size', `${next.spineBandSize}px`)
       setMetrics((current) => (
         Math.abs(current.cellSize - next.cellSize) < 0.01
         && Math.abs(current.lineBandSize - next.lineBandSize) < 0.01
+        && Math.abs(current.crossBandSize - next.crossBandSize) < 0.01
         && Math.abs(current.spineBandSize - next.spineBandSize) < 0.01
       ) ? current : next)
     }
@@ -122,15 +130,19 @@ function useGridMetrics({ direction, columns, rows, verticalSpread, horizontalSp
       window.cancelAnimationFrame(animationFrame)
       animationFrame = window.requestAnimationFrame(update)
     }
+    const updateBeforePrint = () => {
+      window.cancelAnimationFrame(animationFrame)
+      update()
+    }
     const observer = new ResizeObserver(schedule)
     observer.observe(frame)
-    window.addEventListener('beforeprint', schedule)
+    window.addEventListener('beforeprint', updateBeforePrint)
     window.addEventListener('afterprint', schedule)
     schedule()
     return () => {
       window.cancelAnimationFrame(animationFrame)
       observer.disconnect()
-      window.removeEventListener('beforeprint', schedule)
+      window.removeEventListener('beforeprint', updateBeforePrint)
       window.removeEventListener('afterprint', schedule)
     }
   }, [columns, direction, horizontalSpread, rows, verticalSpread])
@@ -140,6 +152,7 @@ function useGridMetrics({ direction, columns, rows, verticalSpread, horizontalSp
     style: {
       '--cell-size': `${metrics.cellSize}px`,
       '--line-band-size': `${metrics.lineBandSize}px`,
+      '--cross-band-size': `${metrics.crossBandSize}px`,
       '--spine-band-size': `${metrics.spineBandSize}px`,
     } as React.CSSProperties,
   }
@@ -163,11 +176,13 @@ function ThemeToggle({ value, onChange, labels }: { value: Theme; onChange: (the
   </div>
 }
 
-function ManuscriptPage({ direction, paper, paperOrientation, composition, cells, page, total, fontFamily, fontSize, margin, gridColor, showServiceMark, labels, language }: { direction: Direction; paper: PaperId; paperOrientation: PaperOrientation; composition: CompositionId; cells: ManuscriptCell[]; page: number; total: number; fontFamily: string; fontSize: string; margin: string; gridColor: string; showServiceMark: boolean; labels: Labels; language: Language }) {
+function ManuscriptPage({ direction, paper, paperOrientation, composition, cells, page, total, fontFamily, fontSize, margin, marginPercentage, gridColor, showServiceMark, labels, language }: { direction: Direction; paper: PaperId; paperOrientation: PaperOrientation; composition: CompositionId; cells: ManuscriptCell[]; page: number; total: number; fontFamily: string; fontSize: string; margin: Margin; marginPercentage: number; gridColor: string; showServiceMark: boolean; labels: Labels; language: Language }) {
   const layout = compositions[composition]
   const hasText = cells.some((cell) => cell !== null)
   const paperName = papers[paper][language]
   const paperDimensions = paperOrientation === 'landscape' ? { width: papers[paper].height, height: papers[paper].width } : papers[paper]
+  const paperInlineMargin = marginPercentage / 2
+  const paperBlockMargin = paperInlineMargin * paperDimensions.height / paperDimensions.width
   const columns = direction === 'vertical' ? layout.lines : layout.characters
   const rows = direction === 'vertical' ? layout.characters : layout.lines
   const displayCells = manuscriptDisplayCells(cells, layout, direction)
@@ -181,9 +196,9 @@ function ManuscriptPage({ direction, paper, paperOrientation, composition, cells
   const verticalSpread = direction === 'vertical' && paperOrientation === 'landscape'
   const horizontalSpread = direction === 'horizontal' && paperOrientation === 'portrait'
   const gridMetrics = useGridMetrics({ direction, columns, rows, verticalSpread, horizontalSpread })
-  return <section className="paper-wrap" aria-label={labels.preview}>
+  return <section className="paper-wrap" aria-label={labels.preview} style={{ '--print-paper-width': `${paperDimensions.width}mm`, '--print-paper-height': `${paperDimensions.height}mm` } as React.CSSProperties}>
     <div className="paper-meta">{paperName} / {direction === 'vertical' ? labels.vertical : labels.horizontal} / {paperOrientation === 'portrait' ? labels.portrait : labels.landscape} / {compositionLabel(layout, labels, language)}</div>
-    <div className={`paper page-${paper} orientation-${paperOrientation} direction-${direction} family-${fontFamily} font-${fontSize} margin-${margin} ${showServiceMark ? 'has-service-mark' : ''}`} style={{ '--columns': columns, '--rows': rows, '--paper-line': gridColor, '--paper-width': paperDimensions.width, '--paper-height': paperDimensions.height, ...gridMetrics.style } as React.CSSProperties}>
+    <div className={`paper page-${paper} orientation-${paperOrientation} direction-${direction} family-${fontFamily} font-${fontSize} margin-${margin} ${showServiceMark ? 'has-service-mark' : ''}`} style={{ '--columns': columns, '--rows': rows, '--paper-line': gridColor, '--paper-width': paperDimensions.width, '--paper-height': paperDimensions.height, '--paper-block-margin': `${paperBlockMargin}%`, '--paper-inline-margin': `${paperInlineMargin}%`, ...gridMetrics.style } as React.CSSProperties}>
       <div className="manuscript-grid-frame" ref={gridMetrics.frameRef}>
         {verticalSpread
           ? <div className="manuscript-grid vertical-manuscript-grid" aria-label={hasText ? `${labels.sourceCount} ${manuscriptCharacters(cells.join('')).length}${labels.sourceSuffix}` : labels.blank}>
@@ -220,7 +235,8 @@ export default function App() {
   const [composition, setComposition] = useState<CompositionId>('20x20')
   const [fontFamily, setFontFamily] = useState('mincho')
   const [fontSize, setFontSize] = useState('normal')
-  const [margin, setMargin] = useState('standard')
+  const [margin, setMargin] = useState<Margin>('standard')
+  const [customMarginPercentage, setCustomMarginPercentage] = useState(20)
   const [gridColor, setGridColor] = useState('#c9ad97')
   const [autoParagraphIndent, setAutoParagraphIndent] = useState(true)
   const [showServiceMark, setShowServiceMark] = useState(true)
@@ -231,6 +247,18 @@ export default function App() {
   const labels: Labels = copy[language]
   const sourceCharacters = useMemo(() => manuscriptCharacters(text).length, [text])
   const layoutOptions = useMemo(() => ({ autoParagraphIndent }), [autoParagraphIndent])
+  const marginPercentage = margin === 'custom' ? customMarginPercentage : marginPercentages[margin]
+  const paperDimensions = paperOrientation === 'landscape' ? { width: papers[paper].height, height: papers[paper].width } : papers[paper]
+  const layout = compositions[composition]
+  const layoutSupported = gridMetricsForFrame({
+    direction,
+    columns: direction === 'vertical' ? layout.lines : layout.characters,
+    rows: direction === 'vertical' ? layout.characters : layout.lines,
+    verticalSpread: direction === 'vertical' && paperOrientation === 'landscape',
+    horizontalSpread: direction === 'horizontal' && paperOrientation === 'portrait',
+    width: paperDimensions.width * (1 - marginPercentage / 100),
+    height: paperDimensions.height * (1 - marginPercentage / 100),
+  }) !== undefined
   const totalPages = useMemo(() => pageTotal(text, compositions[composition], layoutOptions), [text, composition, layoutOptions])
   const pages = useMemo(() => manuscriptPages(text, compositions[composition], layoutOptions), [text, composition, layoutOptions])
 
@@ -264,7 +292,7 @@ export default function App() {
   }, [status])
 
   const savePdf = async () => {
-    if (!previewRef.current || pending) return
+    if (!previewRef.current || pending || !layoutSupported) return
     setPending('pdf')
     try {
       const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')])
@@ -286,7 +314,7 @@ export default function App() {
   }
 
   const print = () => {
-    if (pending) return
+    if (pending || !layoutSupported) return
     setPending('print')
     window.setTimeout(() => {
       window.print()
@@ -321,7 +349,8 @@ export default function App() {
           <div className="detail-grid">
             <label>{labels.fontFamily}<select value={fontFamily} onChange={(event) => setFontFamily(event.target.value)}><option value="mincho">{labels.mincho}</option><option value="gothic">{labels.gothic}</option></select></label>
             <label>{labels.fontSize}<select value={fontSize} onChange={(event) => setFontSize(event.target.value)}><option value="small">{labels.small}</option><option value="normal">{labels.medium}</option><option value="large">{labels.large}</option></select></label>
-            <label>{labels.margin}<select value={margin} onChange={(event) => setMargin(event.target.value)}><option value="narrow">{labels.marginNarrow}</option><option value="standard">{labels.standard}</option><option value="wide">{labels.marginWidePrint}</option></select></label>
+            <label>{labels.margin}<select value={margin} onChange={(event) => setMargin(event.target.value as Margin)}><option value="narrow">{labels.marginNarrow}</option><option value="standard">{labels.standard}</option><option value="wide">{labels.marginWidePrint}</option><option value="custom">{labels.marginCustom}</option></select></label>
+            {margin === 'custom' && <label className="custom-margin-control" htmlFor="margin-percentage"><span>{labels.marginPercentage}</span><output htmlFor="margin-percentage">{customMarginPercentage}%</output><input id="margin-percentage" type="range" min="0" max="40" step="1" value={customMarginPercentage} aria-valuetext={`${customMarginPercentage}%`} onChange={(event) => setCustomMarginPercentage(Number(event.target.value))} /></label>}
             <label>{labels.gridColor}<span className="color-control"><input aria-label={labels.gridColor} type="color" value={gridColor} onChange={(event) => setGridColor(event.target.value)} /><output>{gridColor}</output></span></label>
             <div className="paper-orientation-control"><span id="paper-orientation-label">{labels.paperOrientation}</span><PaperOrientationControl value={paperOrientation} onChange={setPaperOrientation} labels={labels} labelId="paper-orientation-label" /></div>
             <label className="mark-control"><input type="checkbox" checked={autoParagraphIndent} onChange={(event) => setAutoParagraphIndent(event.target.checked)} /><span>{labels.paragraphIndent}</span></label>
@@ -330,14 +359,16 @@ export default function App() {
         </details>
 
         <div className="action-group">
-          <button type="button" className="button primary" disabled={pending !== null} aria-busy={pending === 'pdf'} onClick={savePdf}>{pending === 'pdf' ? labels.saving : labels.save}</button>
-          <button type="button" className="button secondary" disabled={pending !== null} aria-busy={pending === 'print'} onClick={print}>{pending === 'print' ? labels.printing : labels.print}</button>
+          <button type="button" className="button primary" disabled={pending !== null || !layoutSupported} aria-busy={pending === 'pdf'} aria-describedby={!layoutSupported ? 'layout-unavailable' : undefined} onClick={savePdf}>{pending === 'pdf' ? labels.saving : labels.save}</button>
+          <button type="button" className="button secondary" disabled={pending !== null || !layoutSupported} aria-busy={pending === 'print'} aria-describedby={!layoutSupported ? 'layout-unavailable' : undefined} onClick={print}>{pending === 'print' ? labels.printing : labels.print}</button>
         </div>
       </section>
 
       <section className="preview-panel" aria-label={labels.preview}>
         <div className="preview-heading"><h1>{labels.preview}</h1><InfoButton label={labels.info} content={labels.settingsInfo} /></div>
-        <div className="preview-capture" ref={previewRef}>{pages.map((cells, index) => <ManuscriptPage key={index} direction={direction} paper={paper} paperOrientation={paperOrientation} composition={composition} cells={cells} page={index + 1} total={pages.length} fontFamily={fontFamily} fontSize={fontSize} margin={margin} gridColor={gridColor} showServiceMark={showServiceMark} labels={labels} language={language} />)}</div>
+        <div className="preview-capture" ref={previewRef}>{layoutSupported
+          ? pages.map((cells, index) => <ManuscriptPage key={index} direction={direction} paper={paper} paperOrientation={paperOrientation} composition={composition} cells={cells} page={index + 1} total={pages.length} fontFamily={fontFamily} fontSize={fontSize} margin={margin} marginPercentage={marginPercentage} gridColor={gridColor} showServiceMark={showServiceMark} labels={labels} language={language} />)
+          : <p id="layout-unavailable" className="layout-unavailable" role="status">{labels.layoutUnavailable}</p>}</div>
       </section>
     </div>
 
