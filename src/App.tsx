@@ -196,9 +196,11 @@ function ManuscriptPage({ direction, paper, paperOrientation, composition, cells
   const verticalSpread = direction === 'vertical' && paperOrientation === 'landscape'
   const horizontalSpread = direction === 'horizontal' && paperOrientation === 'portrait'
   const gridMetrics = useGridMetrics({ direction, columns, rows, verticalSpread, horizontalSpread })
+  // 余白が10%未満ではサービス名を罫線外に置く領域がないため、罫線への重なりを避ける。
+  const canShowServiceMark = showServiceMark && marginPercentage >= marginPercentages.narrow
   return <section className="paper-wrap" aria-label={labels.preview} style={{ '--print-paper-width': `${paperDimensions.width}mm`, '--print-paper-height': `${paperDimensions.height}mm` } as React.CSSProperties}>
     <div className="paper-meta">{paperName} / {direction === 'vertical' ? labels.vertical : labels.horizontal} / {paperOrientation === 'portrait' ? labels.portrait : labels.landscape} / {compositionLabel(layout, labels, language)}</div>
-    <div className={`paper page-${paper} orientation-${paperOrientation} direction-${direction} family-${fontFamily} font-${fontSize} margin-${margin} ${showServiceMark ? 'has-service-mark' : ''}`} style={{ '--columns': columns, '--rows': rows, '--paper-line': gridColor, '--paper-width': paperDimensions.width, '--paper-height': paperDimensions.height, '--paper-block-margin': `${paperBlockMargin}%`, '--paper-inline-margin': `${paperInlineMargin}%`, ...gridMetrics.style } as React.CSSProperties}>
+    <div className={`paper page-${paper} orientation-${paperOrientation} direction-${direction} family-${fontFamily} font-${fontSize} margin-${margin} ${canShowServiceMark ? 'has-service-mark' : ''}`} style={{ '--columns': columns, '--rows': rows, '--paper-line': gridColor, '--paper-width': paperDimensions.width, '--paper-height': paperDimensions.height, '--paper-block-margin': `${paperBlockMargin}%`, '--paper-inline-margin': `${paperInlineMargin}%`, '--service-mark-bottom': `${paperInlineMargin}%`, ...gridMetrics.style } as React.CSSProperties}>
       <div className="manuscript-grid-frame" ref={gridMetrics.frameRef}>
         {verticalSpread
           ? <div className="manuscript-grid vertical-manuscript-grid" aria-label={hasText ? `${labels.sourceCount} ${manuscriptCharacters(cells.join('')).length}${labels.sourceSuffix}` : labels.blank}>
@@ -218,7 +220,7 @@ function ManuscriptPage({ direction, paper, paperOrientation, composition, cells
             : <div className="manuscript-grid" aria-label={hasText ? `${labels.sourceCount} ${manuscriptCharacters(cells.join('')).length}${labels.sourceSuffix}` : labels.blank}>{displayCells.map((cell, index) => <span key={index} className="manuscript-cell">{cell}</span>)}</div>}
       </div>
       {!hasText && <p className="empty-paper">{labels.blank}</p>}
-      {showServiceMark && <span className="service-mark" aria-hidden="true">{labels.serviceName}</span>}
+      {canShowServiceMark && <span className="service-mark" aria-hidden="true">{labels.serviceName}</span>}
     </div>
     <div className="page-footer">{labels.page} {page} / {total}</div>
   </section>

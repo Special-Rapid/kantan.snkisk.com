@@ -69,7 +69,7 @@ textarea { min-height: 348px; padding: var(--space-3); line-height: 1.75; resize
 .paper-wrap { width: min(100%, 610px); color: #181818; }
 .paper-meta { padding: 0 0 var(--space-2); color: #484848; font-size: 13px; }
 .paper { position: relative; box-sizing: border-box; width: 100%; aspect-ratio: var(--paper-width) / var(--paper-height); display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); background: #fff !important; color-scheme: only light; box-shadow: 0 1px 7px var(--shadow); padding-block: var(--paper-block-margin); padding-inline: var(--paper-inline-margin); }
-.service-mark { position: absolute; left: calc(var(--paper-inline-margin) / 2); bottom: calc(var(--paper-block-margin) / 2); color: var(--paper-line); font-family: Inter, "Hiragino Sans", sans-serif; font-size: clamp(7px, 1.1vw, 10px); line-height: 1; letter-spacing: .02em; }
+.service-mark { position: absolute; left: calc(var(--paper-inline-margin) / 2); bottom: max(0px, calc(var(--service-mark-bottom) - 1em - 1px)); color: var(--paper-line); font-family: Inter, "Hiragino Sans", sans-serif; font-size: clamp(7px, 1.1vw, 10px); line-height: 1; letter-spacing: .02em; }
 .manuscript-grid-frame { grid-column: 1; grid-row: 1; display: grid; min-width: 0; min-height: 0; overflow: hidden; place-items: center; }
 .manuscript-grid { width: max-content; height: max-content; display: grid; place-self: center; border: 1px solid var(--paper-line); background: #fff; }
 .manuscript-grid:not(.vertical-manuscript-grid):not(.horizontal-manuscript-grid) { grid-template-columns: repeat(var(--columns), var(--cell-size)); grid-template-rows: repeat(var(--rows), var(--cell-size)); }
