@@ -50,6 +50,10 @@ function stored<T>(key: string, fallback: T): T {
   try { return (localStorage.getItem(key) as T) || fallback } catch { return fallback }
 }
 
+function persist(key: string, value: string) {
+  try { localStorage.setItem(key, value) } catch { /* ブラウザ保存が使えなくても画面操作を継続する。 */ }
+}
+
 function initialLanguagePreference(): LanguagePreference {
   const preference = stored<string>('kantan:language-preference', '')
   if (preference === 'ja' || preference === 'en' || preference === 'system') return preference
@@ -198,12 +202,16 @@ function ManuscriptPage({ direction, paper, paperOrientation, composition, cells
   const horizontalSpread = direction === 'horizontal' && paperOrientation === 'portrait'
   const gridMetrics = useGridMetrics({ direction, columns, rows, verticalSpread, horizontalSpread })
   const printablePaper = { width: paperDimensions.width - 8, height: paperDimensions.height - 8 }
-  const printPaperBlockMargin = paperInlineMargin * printablePaper.height / printablePaper.width
+  const paperInlineMarginMillimeters = paperDimensions.width * paperInlineMargin / 100
+  const paperBlockMarginMillimeters = paperDimensions.height * paperInlineMargin / 100
+  const printPaperInlineMargin = Math.max(0, (paperInlineMarginMillimeters - 4) / printablePaper.width * 100)
+  const printPaperBlockMargin = Math.max(0, (paperBlockMarginMillimeters - 4) / printablePaper.width * 100)
+  const printServiceMarkBottom = Math.max(0, (paperBlockMarginMillimeters - 4) / printablePaper.height * 100)
   // 余白が10%未満ではサービス名を罫線外に置く領域がないため、罫線への重なりを避ける。
   const canShowServiceMark = showServiceMark && marginPercentage >= marginPercentages.narrow
   return <section className={`paper-wrap page-${paper} orientation-${paperOrientation}`} aria-label={labels.preview} style={{ '--print-paper-width': `${paperDimensions.width}mm`, '--print-paper-height': `${paperDimensions.height}mm` } as React.CSSProperties}>
     <div className="paper-meta">{paperName} / {direction === 'vertical' ? labels.vertical : labels.horizontal} / {paperOrientation === 'portrait' ? labels.portrait : labels.landscape} / {compositionLabel(layout, labels, language)}</div>
-    <div className={`paper page-${paper} orientation-${paperOrientation} direction-${direction} family-${fontFamily} font-${fontSize} margin-${margin} ${canShowServiceMark ? 'has-service-mark' : ''}`} style={{ '--columns': columns, '--rows': rows, '--paper-line': gridColor, '--paper-width': paperDimensions.width, '--paper-height': paperDimensions.height, '--paper-block-margin': `${paperBlockMargin}%`, '--print-paper-block-margin': `${printPaperBlockMargin}%`, '--paper-inline-margin': `${paperInlineMargin}%`, '--service-mark-bottom': `${paperInlineMargin}%`, '--print-cell-size': `${printGridMetrics.cellSize}mm`, '--print-line-band-size': `${printGridMetrics.lineBandSize}mm`, '--print-cross-band-size': `${printGridMetrics.crossBandSize}mm`, '--print-spine-band-size': `${printGridMetrics.spineBandSize}mm`, ...gridMetrics.style } as React.CSSProperties}>
+    <div className={`paper page-${paper} orientation-${paperOrientation} direction-${direction} family-${fontFamily} font-${fontSize} margin-${margin} ${canShowServiceMark ? 'has-service-mark' : ''}`} style={{ '--columns': columns, '--rows': rows, '--paper-line': gridColor, '--paper-width': paperDimensions.width, '--paper-height': paperDimensions.height, '--paper-block-margin': `${paperBlockMargin}%`, '--print-paper-block-margin': `${printPaperBlockMargin}%`, '--paper-inline-margin': `${paperInlineMargin}%`, '--print-paper-inline-margin': `${printPaperInlineMargin}%`, '--service-mark-bottom': `${paperInlineMargin}%`, '--print-service-mark-bottom': `${printServiceMarkBottom}%`, '--print-cell-size': `${printGridMetrics.cellSize}mm`, '--print-line-band-size': `${printGridMetrics.lineBandSize}mm`, '--print-cross-band-size': `${printGridMetrics.crossBandSize}mm`, '--print-spine-band-size': `${printGridMetrics.spineBandSize}mm`, ...gridMetrics.style } as React.CSSProperties}>
       <div className="manuscript-grid-frame" ref={gridMetrics.frameRef}>
         {verticalSpread
           ? <div className="manuscript-grid vertical-manuscript-grid" aria-label={hasText ? `${labels.sourceCount} ${manuscriptCharacters(cells.join('')).length}${labels.sourceSuffix}` : labels.blank}>
@@ -233,7 +241,7 @@ export default function App() {
   const [languagePreference, setLanguagePreference] = useState<LanguagePreference>(initialLanguagePreference)
   const [theme, setTheme] = useState<Theme>(() => stored('kantan:theme', 'system'))
   const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
-  const [text, setText] = useState('')
+  const [text, setText] = useState(() => stored('kantan:source-text', ''))
   const [direction, setDirection] = useState<Direction>('vertical')
   const [paper, setPaper] = useState<PaperId>('b5')
   const [paperOrientation, setPaperOrientation] = useState<PaperOrientation>('landscape')
@@ -267,13 +275,19 @@ export default function App() {
     width: paperDimensions.width * (1 - marginPercentage / 100),
     height: paperDimensions.height * (1 - marginPercentage / 100),
   })
+  const printablePaper = { width: paperDimensions.width - 8, height: paperDimensions.height - 8 }
+  const printFrameWidth = paperDimensions.width * (1 - marginPercentage / 100)
+  const printFrameHeight = paperDimensions.height * (1 - marginPercentage / 100)
   const printGridMetrics = gridMetricsForFrame({
     ...gridInput,
-    width: (paperDimensions.width - 8) * (1 - marginPercentage / 100),
-    height: (paperDimensions.height - 8) * (1 - marginPercentage / 100),
+    width: printFrameWidth,
+    height: printFrameHeight,
     frameBorderSize: cssPixelInMillimeters,
   })
-  const layoutSupported = previewGridMetrics !== undefined && printGridMetrics !== undefined
+  const printMarginUnavailable = printFrameWidth > printablePaper.width || printFrameHeight > printablePaper.height
+  const layoutSupported = previewGridMetrics !== undefined
+    && printGridMetrics !== undefined
+    && !printMarginUnavailable
   const totalPages = useMemo(() => pageTotal(text, compositions[composition], layoutOptions), [text, composition, layoutOptions])
   const pages = useMemo(() => manuscriptPages(text, compositions[composition], layoutOptions), [text, composition, layoutOptions])
 
@@ -283,8 +297,8 @@ export default function App() {
   }
 
   useEffect(() => {
-    localStorage.setItem('kantan:language-preference', languagePreference)
-    if (languagePreference !== 'system') localStorage.setItem('kantan:language', languagePreference)
+    persist('kantan:language-preference', languagePreference)
+    if (languagePreference !== 'system') persist('kantan:language', languagePreference)
     document.documentElement.lang = language
   }, [language, languagePreference])
 
@@ -296,9 +310,13 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    localStorage.setItem('kantan:theme', theme)
+    persist('kantan:theme', theme)
     document.documentElement.dataset.theme = theme === 'system' ? (systemDark ? 'dark' : 'light') : theme
   }, [systemDark, theme])
+
+  useEffect(() => {
+    persist('kantan:source-text', text)
+  }, [text])
 
   useEffect(() => {
     if (!status) return
@@ -383,7 +401,7 @@ export default function App() {
         <div className="preview-heading"><h1>{labels.preview}</h1><InfoButton label={labels.info} content={labels.settingsInfo} /></div>
         <div className="preview-capture" ref={previewRef}>{layoutSupported
           ? pages.map((cells, index) => <ManuscriptPage key={index} direction={direction} paper={paper} paperOrientation={paperOrientation} composition={composition} cells={cells} page={index + 1} total={pages.length} fontFamily={fontFamily} fontSize={fontSize} margin={margin} marginPercentage={marginPercentage} gridColor={gridColor} showServiceMark={showServiceMark} printGridMetrics={printGridMetrics!} labels={labels} language={language} />)
-          : <p id="layout-unavailable" className="layout-unavailable" role="status">{labels.layoutUnavailable}</p>}</div>
+          : <p id="layout-unavailable" className="layout-unavailable" role="status">{printMarginUnavailable ? labels.printMarginUnavailable : labels.layoutUnavailable}</p>}</div>
       </section>
     </div>
 
