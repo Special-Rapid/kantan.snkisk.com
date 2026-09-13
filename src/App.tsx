@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { copy, type Labels, type Language } from './lib/copy'
 import { manuscriptCharacters, manuscriptDisplayCells, manuscriptPages, pageTotal, type Direction, type ManuscriptCell } from './lib/layout'
-import { gridMetricsForFrame } from './lib/grid-metrics'
+import { gridMetricsForFrame, type GridMetrics } from './lib/grid-metrics'
 
 type Theme = 'system' | 'light' | 'dark'
 type PaperId = 'b5' | 'a4'
@@ -44,6 +44,7 @@ const themeOptions = ['light', 'system', 'dark'] as const
 const directionOptions = ['vertical', 'horizontal'] as const
 const paperOrientationOptions = ['portrait', 'landscape'] as const
 const marginPercentages: Record<Exclude<Margin, 'custom'>, number> = { narrow: 10, standard: 20, wide: 30 }
+const cssPixelInMillimeters = 25.4 / 96
 
 function stored<T>(key: string, fallback: T): T {
   try { return (localStorage.getItem(key) as T) || fallback } catch { return fallback }
@@ -176,7 +177,7 @@ function ThemeToggle({ value, onChange, labels }: { value: Theme; onChange: (the
   </div>
 }
 
-function ManuscriptPage({ direction, paper, paperOrientation, composition, cells, page, total, fontFamily, fontSize, margin, marginPercentage, gridColor, showServiceMark, labels, language }: { direction: Direction; paper: PaperId; paperOrientation: PaperOrientation; composition: CompositionId; cells: ManuscriptCell[]; page: number; total: number; fontFamily: string; fontSize: string; margin: Margin; marginPercentage: number; gridColor: string; showServiceMark: boolean; labels: Labels; language: Language }) {
+function ManuscriptPage({ direction, paper, paperOrientation, composition, cells, page, total, fontFamily, fontSize, margin, marginPercentage, gridColor, showServiceMark, printGridMetrics, labels, language }: { direction: Direction; paper: PaperId; paperOrientation: PaperOrientation; composition: CompositionId; cells: ManuscriptCell[]; page: number; total: number; fontFamily: string; fontSize: string; margin: Margin; marginPercentage: number; gridColor: string; showServiceMark: boolean; printGridMetrics: GridMetrics; labels: Labels; language: Language }) {
   const layout = compositions[composition]
   const hasText = cells.some((cell) => cell !== null)
   const paperName = papers[paper][language]
@@ -196,11 +197,13 @@ function ManuscriptPage({ direction, paper, paperOrientation, composition, cells
   const verticalSpread = direction === 'vertical' && paperOrientation === 'landscape'
   const horizontalSpread = direction === 'horizontal' && paperOrientation === 'portrait'
   const gridMetrics = useGridMetrics({ direction, columns, rows, verticalSpread, horizontalSpread })
+  const printablePaper = { width: paperDimensions.width - 8, height: paperDimensions.height - 8 }
+  const printPaperBlockMargin = paperInlineMargin * printablePaper.height / printablePaper.width
   // 余白が10%未満ではサービス名を罫線外に置く領域がないため、罫線への重なりを避ける。
   const canShowServiceMark = showServiceMark && marginPercentage >= marginPercentages.narrow
-  return <section className="paper-wrap" aria-label={labels.preview} style={{ '--print-paper-width': `${paperDimensions.width}mm`, '--print-paper-height': `${paperDimensions.height}mm` } as React.CSSProperties}>
+  return <section className={`paper-wrap page-${paper} orientation-${paperOrientation}`} aria-label={labels.preview} style={{ '--print-paper-width': `${paperDimensions.width}mm`, '--print-paper-height': `${paperDimensions.height}mm` } as React.CSSProperties}>
     <div className="paper-meta">{paperName} / {direction === 'vertical' ? labels.vertical : labels.horizontal} / {paperOrientation === 'portrait' ? labels.portrait : labels.landscape} / {compositionLabel(layout, labels, language)}</div>
-    <div className={`paper page-${paper} orientation-${paperOrientation} direction-${direction} family-${fontFamily} font-${fontSize} margin-${margin} ${canShowServiceMark ? 'has-service-mark' : ''}`} style={{ '--columns': columns, '--rows': rows, '--paper-line': gridColor, '--paper-width': paperDimensions.width, '--paper-height': paperDimensions.height, '--paper-block-margin': `${paperBlockMargin}%`, '--paper-inline-margin': `${paperInlineMargin}%`, '--service-mark-bottom': `${paperInlineMargin}%`, ...gridMetrics.style } as React.CSSProperties}>
+    <div className={`paper page-${paper} orientation-${paperOrientation} direction-${direction} family-${fontFamily} font-${fontSize} margin-${margin} ${canShowServiceMark ? 'has-service-mark' : ''}`} style={{ '--columns': columns, '--rows': rows, '--paper-line': gridColor, '--paper-width': paperDimensions.width, '--paper-height': paperDimensions.height, '--paper-block-margin': `${paperBlockMargin}%`, '--print-paper-block-margin': `${printPaperBlockMargin}%`, '--paper-inline-margin': `${paperInlineMargin}%`, '--service-mark-bottom': `${paperInlineMargin}%`, '--print-cell-size': `${printGridMetrics.cellSize}mm`, '--print-line-band-size': `${printGridMetrics.lineBandSize}mm`, '--print-cross-band-size': `${printGridMetrics.crossBandSize}mm`, '--print-spine-band-size': `${printGridMetrics.spineBandSize}mm`, ...gridMetrics.style } as React.CSSProperties}>
       <div className="manuscript-grid-frame" ref={gridMetrics.frameRef}>
         {verticalSpread
           ? <div className="manuscript-grid vertical-manuscript-grid" aria-label={hasText ? `${labels.sourceCount} ${manuscriptCharacters(cells.join('')).length}${labels.sourceSuffix}` : labels.blank}>
@@ -252,15 +255,25 @@ export default function App() {
   const marginPercentage = margin === 'custom' ? customMarginPercentage : marginPercentages[margin]
   const paperDimensions = paperOrientation === 'landscape' ? { width: papers[paper].height, height: papers[paper].width } : papers[paper]
   const layout = compositions[composition]
-  const layoutSupported = gridMetricsForFrame({
+  const gridInput = {
     direction,
     columns: direction === 'vertical' ? layout.lines : layout.characters,
     rows: direction === 'vertical' ? layout.characters : layout.lines,
     verticalSpread: direction === 'vertical' && paperOrientation === 'landscape',
     horizontalSpread: direction === 'horizontal' && paperOrientation === 'portrait',
+  }
+  const previewGridMetrics = gridMetricsForFrame({
+    ...gridInput,
     width: paperDimensions.width * (1 - marginPercentage / 100),
     height: paperDimensions.height * (1 - marginPercentage / 100),
-  }) !== undefined
+  })
+  const printGridMetrics = gridMetricsForFrame({
+    ...gridInput,
+    width: (paperDimensions.width - 8) * (1 - marginPercentage / 100),
+    height: (paperDimensions.height - 8) * (1 - marginPercentage / 100),
+    frameBorderSize: cssPixelInMillimeters,
+  })
+  const layoutSupported = previewGridMetrics !== undefined && printGridMetrics !== undefined
   const totalPages = useMemo(() => pageTotal(text, compositions[composition], layoutOptions), [text, composition, layoutOptions])
   const pages = useMemo(() => manuscriptPages(text, compositions[composition], layoutOptions), [text, composition, layoutOptions])
 
@@ -369,7 +382,7 @@ export default function App() {
       <section className="preview-panel" aria-label={labels.preview}>
         <div className="preview-heading"><h1>{labels.preview}</h1><InfoButton label={labels.info} content={labels.settingsInfo} /></div>
         <div className="preview-capture" ref={previewRef}>{layoutSupported
-          ? pages.map((cells, index) => <ManuscriptPage key={index} direction={direction} paper={paper} paperOrientation={paperOrientation} composition={composition} cells={cells} page={index + 1} total={pages.length} fontFamily={fontFamily} fontSize={fontSize} margin={margin} marginPercentage={marginPercentage} gridColor={gridColor} showServiceMark={showServiceMark} labels={labels} language={language} />)
+          ? pages.map((cells, index) => <ManuscriptPage key={index} direction={direction} paper={paper} paperOrientation={paperOrientation} composition={composition} cells={cells} page={index + 1} total={pages.length} fontFamily={fontFamily} fontSize={fontSize} margin={margin} marginPercentage={marginPercentage} gridColor={gridColor} showServiceMark={showServiceMark} printGridMetrics={printGridMetrics!} labels={labels} language={language} />)
           : <p id="layout-unavailable" className="layout-unavailable" role="status">{labels.layoutUnavailable}</p>}</div>
       </section>
     </div>

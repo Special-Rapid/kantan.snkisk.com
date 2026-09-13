@@ -8,7 +8,7 @@ const compositions = [
   { characters: 40, lines: 30 }, { characters: 40, lines: 40 },
 ]
 
-const gridDimensions = ({ direction, columns, rows, verticalSpread, horizontalSpread, cellSize, lineBandSize, crossBandSize }: {
+const gridDimensions = ({ direction, columns, rows, verticalSpread, horizontalSpread, cellSize, lineBandSize, crossBandSize, frameBorderSize = 1 }: {
   direction: 'vertical' | 'horizontal'
   columns: number
   rows: number
@@ -17,6 +17,7 @@ const gridDimensions = ({ direction, columns, rows, verticalSpread, horizontalSp
   cellSize: number
   lineBandSize: number
   crossBandSize: number
+  frameBorderSize?: number
 }) => {
   const leftColumns = Math.floor(columns / 2)
   const topRows = Math.floor(rows / 2)
@@ -29,8 +30,8 @@ const gridDimensions = ({ direction, columns, rows, verticalSpread, horizontalSp
   const lineBandCount = direction === 'vertical' ? verticalBands + (verticalSpread ? 1 : 0) : horizontalBands + (horizontalSpread ? 1 : 0)
 
   return direction === 'vertical'
-    ? { width: 2 + columns * cellSize + lineBandCount * lineBandSize, height: 2 + rows * cellSize + Math.max(rows - 1, 0) * crossBandSize }
-    : { width: 2 + columns * cellSize + Math.max(columns - 1, 0) * crossBandSize, height: 2 + rows * cellSize + lineBandCount * lineBandSize }
+    ? { width: frameBorderSize * 2 + columns * cellSize + lineBandCount * lineBandSize, height: frameBorderSize * 2 + rows * cellSize + Math.max(rows - 1, 0) * crossBandSize }
+    : { width: frameBorderSize * 2 + columns * cellSize + Math.max(columns - 1, 0) * crossBandSize, height: frameBorderSize * 2 + rows * cellSize + lineBandCount * lineBandSize }
 }
 
 describe('原稿用紙の非計数帯', () => {
@@ -114,6 +115,47 @@ describe('原稿用紙の非計数帯', () => {
     }
     expect(supported).toBeGreaterThan(0)
     expect(unsupported).toBeGreaterThan(0)
+  })
+
+  it('4mmの印刷可能領域まで成立した構成だけが、印刷用の正方形マスと半セル以下の帯を使える', () => {
+    let printSupported = 0
+    let printUnsupported = 0
+    for (const composition of compositions) {
+      for (const direction of ['vertical', 'horizontal'] as const) {
+        for (const orientation of ['portrait', 'landscape'] as const) {
+          const verticalSpread = direction === 'vertical' && orientation === 'landscape'
+          const horizontalSpread = direction === 'horizontal' && orientation === 'portrait'
+          const columns = direction === 'vertical' ? composition.lines : composition.characters
+          const rows = direction === 'vertical' ? composition.characters : composition.lines
+
+          for (const paper of [{ width: 182, height: 257 }, { width: 210, height: 297 }]) {
+            const paperWidth = orientation === 'portrait' ? paper.width : paper.height
+            const paperHeight = orientation === 'portrait' ? paper.height : paper.width
+            for (const totalMarginPercentage of [0, 10, 20, 30, 40]) {
+              const screenMetrics = gridMetricsForFrame({ direction, columns, rows, verticalSpread, horizontalSpread, width: paperWidth * (1 - totalMarginPercentage / 100), height: paperHeight * (1 - totalMarginPercentage / 100) })
+              if (!screenMetrics) continue
+
+              const printWidth = (paperWidth - 8) * (1 - totalMarginPercentage / 100)
+              const printHeight = (paperHeight - 8) * (1 - totalMarginPercentage / 100)
+              const printBorderSize = 25.4 / 96
+              const printMetrics = gridMetricsForFrame({ direction, columns, rows, verticalSpread, horizontalSpread, width: printWidth, height: printHeight, frameBorderSize: printBorderSize })
+              if (!printMetrics) {
+                printUnsupported += 1
+                continue
+              }
+              printSupported += 1
+              expect(printMetrics!.lineBandSize).toBeLessThanOrEqual(printMetrics!.cellSize * maximumLineBandRatio)
+              expect(printMetrics!.crossBandSize).toBeLessThanOrEqual(printMetrics!.cellSize * maximumLineBandRatio)
+              const printGrid = gridDimensions({ direction, columns, rows, verticalSpread, horizontalSpread, cellSize: printMetrics!.cellSize, lineBandSize: printMetrics!.lineBandSize, crossBandSize: printMetrics!.crossBandSize, frameBorderSize: printBorderSize })
+              expect(printGrid.width).toBeCloseTo(printWidth, 1)
+              expect(printGrid.height).toBeCloseTo(printHeight, 1)
+            }
+          }
+        }
+      }
+    }
+    expect(printSupported).toBeGreaterThan(0)
+    expect(printUnsupported).toBeGreaterThan(0)
   })
 
   it('10×20の横書き・縦向きは補助帯を使って成立し、同じ字詰めの縦書き・縦向きは表示しない', () => {

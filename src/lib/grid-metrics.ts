@@ -19,10 +19,12 @@ export interface GridMetricsInput {
   horizontalSpread: boolean
   width: number
   height: number
+  /** 計算単位における原稿罫線外枠の片側幅。画面はCSS px、印刷はmmで渡す。 */
+  frameBorderSize?: number
 }
 
 /** 正方形マスを優先し、非計数帯はセルの半分以下に保つ。 */
-export const gridMetricsForFrame = ({ direction, columns, rows, verticalSpread, horizontalSpread, width, height }: GridMetricsInput): GridMetrics | undefined => {
+export const gridMetricsForFrame = ({ direction, columns, rows, verticalSpread, horizontalSpread, width, height, frameBorderSize = 1 }: GridMetricsInput): GridMetrics | undefined => {
   if (width <= 0 || height <= 0) return undefined
 
   const leftColumns = Math.floor(columns / 2)
@@ -33,8 +35,8 @@ export const gridMetricsForFrame = ({ direction, columns, rows, verticalSpread, 
   const horizontalBands = horizontalSpread
     ? Math.max(topRows - 1, 0) + Math.max(rows - topRows - 1, 0)
     : Math.max(rows - 1, 0)
-  const availableWidth = Math.max(1, width - 2)
-  const availableHeight = Math.max(1, height - 2)
+  const availableWidth = Math.max(1, width - frameBorderSize * 2)
+  const availableHeight = Math.max(1, height - frameBorderSize * 2)
   const lineAxisCells = direction === 'vertical' ? columns : rows
   const crossAxisCells = direction === 'vertical' ? rows : columns
   const lineAxisAvailable = direction === 'vertical' ? availableWidth : availableHeight
