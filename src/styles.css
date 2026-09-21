@@ -26,6 +26,14 @@ button:focus-visible, select:focus-visible, textarea:focus-visible, summary:focu
 .workspace { display: grid; grid-template-columns: minmax(320px, 0.82fr) minmax(440px, 1.18fr); gap: clamp(32px, 6vw, 96px); align-items: start; padding-top: var(--space-5); }
 .site-footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-5); padding-top: var(--space-2); color: var(--muted); font-size: 13px; }
 .site-footer a { color: inherit; text-underline-offset: 3px; }
+.docs-article { width: min(100%, 760px); margin: clamp(36px, 8vw, 88px) auto 0; padding: clamp(24px, 5vw, 52px); border: 1px solid var(--line); border-radius: calc(var(--radius) * 2); background: var(--surface); box-shadow: 0 12px 32px var(--shadow); }
+.docs-eyebrow { margin: 0 0 var(--space-2); color: var(--muted); font-size: 13px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.docs-article h1 { margin: 0; font-size: clamp(28px, 5vw, 42px); letter-spacing: -.04em; line-height: 1.2; }
+.docs-article h2 { margin: var(--space-5) 0 var(--space-2); font-size: 19px; }
+.docs-article p { margin: 0; color: var(--ink); line-height: 1.8; }
+.docs-lead { margin-top: var(--space-3) !important; color: var(--muted) !important; font-size: 17px; }
+.docs-article pre { overflow-x: auto; margin: var(--space-3) 0 0; padding: var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--bg); color: var(--ink); font: 14px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+.docs-start-link { display: inline-flex; min-height: 48px; align-items: center; margin-top: var(--space-5); padding: 0 var(--space-3); border: 1px solid var(--ink); border-radius: var(--radius); background: var(--ink); color: var(--bg); font-weight: 750; text-decoration: none; }
 .editor { padding-top: var(--space-2); }
 .field-group { border: 0; padding: 0; margin: 0 0 var(--space-3); min-width: 0; }
 .field-group label, .field-group legend { display: block; padding: 0; margin: 0 0 var(--space-1); color: var(--ink); font-size: 15px; font-weight: 700; }

@@ -1,0 +1,30 @@
+# kantan AI print-link specification
+
+kantan is a Japanese manuscript-paper formatter. To let a person print AI-generated text, return one link whose fragment contains the text and optional settings. Do not ask the person to paste text or choose settings again.
+
+Base URL: https://kantan.snkisk.com/
+Format: https://kantan.snkisk.com/#v=1&text={URL_ENCODED_TEXT}&direction={vertical|horizontal}&paper={b5|a4}&orientation={portrait|landscape}&composition={VALUE}
+
+Important privacy rule: put all content in the fragment after #. Do not put text in a query parameter. Browsers do not send fragments in HTTP requests.
+
+Required parameters:
+- v=1
+- text: the complete source text, encoded with encodeURIComponent. Newlines are allowed.
+
+Optional parameters and allowed values:
+- direction: vertical | horizontal
+- paper: b5 | a4
+- orientation: portrait | landscape
+- composition: 10x20 | 14x14 | 16x25 | 20x10 | 20x20 | 20x25 | 25x16 | 25x20 | 30x40 | 40x30 | 40x40
+- fontFamily: mincho | gothic
+- fontSize: small | normal | large
+- margin: narrow | standard | wide | custom
+- customMarginPercentage: integer 0 through 40; required only when margin=custom
+- gridColor: six-digit hexadecimal color such as %23c9ad97
+- autoParagraphIndent: 1 | 0
+- showServiceMark: 1 | 0
+
+Use URL encoding for every value. Omit optional settings when the normal defaults are acceptable. A link may contain up to 20,000 Unicode characters of text. The person opens the link, checks the preview, and presses Print or Save as PDF.
+
+Example:
+https://kantan.snkisk.com/#v=1&text=%E4%BD%9C%E6%96%87%E3%81%A7%E3%81%99%E3%80%82&direction=vertical&paper=b5&orientation=landscape&composition=20x20

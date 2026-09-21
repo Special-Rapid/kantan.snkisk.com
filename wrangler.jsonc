@@ -8,6 +8,16 @@
     "binding": "ASSETS",
     "not_found_handling": "single-page-application"
   },
+  "routes": [
+    {
+      "pattern": "kantan.snkisk.com",
+      "custom_domain": true
+    },
+    {
+      "pattern": "docs.kantan.snkisk.com",
+      "custom_domain": true
+    }
+  ],
   "observability": {
     "enabled": true
   }

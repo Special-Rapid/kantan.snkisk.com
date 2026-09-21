@@ -1,14 +1,15 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { copy, type Labels, type Language } from './lib/copy'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { copy, documentationCopy, type Labels, type Language } from './lib/copy'
 import { manuscriptCharacters, manuscriptDisplayCells, manuscriptPages, pageTotal, type Direction, type ManuscriptCell } from './lib/layout'
 import { gridMetricsForFrame, type GridMetrics } from './lib/grid-metrics'
+import { parsePrintLink, type PrintLinkPayload, type PrintLinkResult } from './lib/print-link'
 
 type Theme = 'system' | 'light' | 'dark'
 type PaperId = 'b5' | 'a4'
 type PaperOrientation = 'portrait' | 'landscape'
 type CompositionId = '10x20' | '14x14' | '16x25' | '20x10' | '20x20' | '20x25' | '25x16' | '25x20' | '30x40' | '40x30' | '40x40'
 type Margin = 'narrow' | 'standard' | 'wide' | 'custom'
-type Status = { tone: 'success' | 'error'; message: string } | null
+type Status = { tone: 'success' | 'error'; message: string; retryPdf?: boolean; printLinkError?: 'invalid' | 'too-long' } | null
 type LanguagePreference = Language | 'system'
 
 const defaultLanguage = (): Language => {
@@ -238,26 +239,103 @@ function ManuscriptPage({ direction, paper, paperOrientation, composition, cells
 }
 
 export default function App() {
+  return window.location.hostname === 'docs.kantan.snkisk.com' || window.location.pathname === '/docs'
+    ? <DocumentationApp />
+    : <ManuscriptApp />
+}
+
+function DocumentationApp() {
   const [languagePreference, setLanguagePreference] = useState<LanguagePreference>(initialLanguagePreference)
   const [theme, setTheme] = useState<Theme>(() => stored('kantan:theme', 'system'))
   const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
-  const [text, setText] = useState(() => stored('kantan:source-text', ''))
-  const [direction, setDirection] = useState<Direction>('vertical')
-  const [paper, setPaper] = useState<PaperId>('b5')
-  const [paperOrientation, setPaperOrientation] = useState<PaperOrientation>('landscape')
-  const [composition, setComposition] = useState<CompositionId>('20x20')
-  const [fontFamily, setFontFamily] = useState('mincho')
-  const [fontSize, setFontSize] = useState('normal')
-  const [margin, setMargin] = useState<Margin>('standard')
-  const [customMarginPercentage, setCustomMarginPercentage] = useState(20)
-  const [gridColor, setGridColor] = useState('#c9ad97')
-  const [autoParagraphIndent, setAutoParagraphIndent] = useState(true)
-  const [showServiceMark, setShowServiceMark] = useState(true)
+  const language = languagePreference === 'system' ? defaultLanguage() : languagePreference
+  const labels: Labels = copy[language]
+  const documentCopy = documentationCopy[language]
+
+  useEffect(() => {
+    persist('kantan:language-preference', languagePreference)
+    if (languagePreference !== 'system') persist('kantan:language', languagePreference)
+    document.documentElement.lang = language
+    document.title = documentCopy.title
+  }, [documentCopy.title, language, languagePreference])
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const updateSystemTheme = () => setSystemDark(mediaQuery.matches)
+    mediaQuery.addEventListener('change', updateSystemTheme)
+    return () => mediaQuery.removeEventListener('change', updateSystemTheme)
+  }, [])
+
+  useEffect(() => {
+    persist('kantan:theme', theme)
+    document.documentElement.dataset.theme = theme === 'system' ? (systemDark ? 'dark' : 'light') : theme
+  }, [systemDark, theme])
+
+  return <main className="app-shell docs-shell">
+    <header className="site-header">
+      <a className="brand" href="https://kantan.snkisk.com/" aria-label="kantan home">kantan</a>
+      <div className="header-preferences">
+        <LanguageToggle value={languagePreference} onChange={setLanguagePreference} labels={labels} />
+        <ThemeToggle value={theme} onChange={setTheme} labels={labels} />
+      </div>
+    </header>
+
+    <article className="docs-article">
+      <p className="docs-eyebrow">{documentCopy.eyebrow}</p>
+      <h1>{documentCopy.heading}</h1>
+      <p className="docs-lead">{documentCopy.lead}</p>
+
+      <section aria-labelledby="docs-instruction">
+        <h2 id="docs-instruction">{documentCopy.instructionHeading}</h2>
+        <p>{documentCopy.instruction}</p>
+        <pre><code>{documentCopy.examplePrompt}</code></pre>
+      </section>
+
+      <section aria-labelledby="docs-privacy">
+        <h2 id="docs-privacy">{documentCopy.privacyHeading}</h2>
+        <p>{documentCopy.privacy}</p>
+      </section>
+
+      <section aria-labelledby="docs-fallback">
+        <h2 id="docs-fallback">{documentCopy.fallbackHeading}</h2>
+        <p>{documentCopy.fallback}</p>
+      </section>
+
+      <a className="docs-start-link" href="https://kantan.snkisk.com/">{documentCopy.start}</a>
+    </article>
+
+    <footer className="site-footer">
+      <span>{labels.copyright}</span>
+      <a href={`mailto:${labels.contact}`}>{labels.contact}</a>
+    </footer>
+  </main>
+}
+
+function ManuscriptApp() {
+  const [initialPrintLink] = useState<PrintLinkResult>(() => parsePrintLink(window.location.hash))
+  const linkedSettings = initialPrintLink.kind === 'valid' ? initialPrintLink.payload : undefined
+  const [languagePreference, setLanguagePreference] = useState<LanguagePreference>(initialLanguagePreference)
+  const [theme, setTheme] = useState<Theme>(() => stored('kantan:theme', 'system'))
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const [text, setText] = useState(() => linkedSettings?.text ?? stored('kantan:source-text', ''))
+  const [direction, setDirection] = useState<Direction>(() => linkedSettings?.direction ?? 'vertical')
+  const [paper, setPaper] = useState<PaperId>(() => linkedSettings?.paper ?? 'b5')
+  const [paperOrientation, setPaperOrientation] = useState<PaperOrientation>(() => linkedSettings?.orientation ?? ((linkedSettings?.direction ?? 'vertical') === 'vertical' ? 'landscape' : 'portrait'))
+  const [composition, setComposition] = useState<CompositionId>(() => linkedSettings?.composition ?? '20x20')
+  const [fontFamily, setFontFamily] = useState<string>(() => linkedSettings?.fontFamily ?? 'mincho')
+  const [fontSize, setFontSize] = useState<string>(() => linkedSettings?.fontSize ?? 'normal')
+  const [margin, setMargin] = useState<Margin>(() => linkedSettings?.margin ?? 'standard')
+  const [customMarginPercentage, setCustomMarginPercentage] = useState(() => linkedSettings?.customMarginPercentage ?? 20)
+  const [gridColor, setGridColor] = useState(() => linkedSettings?.gridColor ?? '#c9ad97')
+  const [autoParagraphIndent, setAutoParagraphIndent] = useState(() => linkedSettings?.autoParagraphIndent ?? true)
+  const [showServiceMark, setShowServiceMark] = useState(() => linkedSettings?.showServiceMark ?? true)
   const [pending, setPending] = useState<'pdf' | 'print' | null>(null)
-  const [status, setStatus] = useState<Status>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const language = languagePreference === 'system' ? defaultLanguage() : languagePreference
   const labels: Labels = copy[language]
+  const [status, setStatus] = useState<Status>(() => initialPrintLink.kind === 'too-long'
+    ? { tone: 'error', message: labels.printLinkTooLong, printLinkError: 'too-long' }
+    : initialPrintLink.kind === 'invalid' ? { tone: 'error', message: labels.printLinkInvalid, printLinkError: 'invalid' } : null)
   const sourceCharacters = useMemo(() => manuscriptCharacters(text).length, [text])
   const layoutOptions = useMemo(() => ({ autoParagraphIndent }), [autoParagraphIndent])
   const marginPercentage = margin === 'custom' ? customMarginPercentage : marginPercentages[margin]
@@ -296,11 +374,47 @@ export default function App() {
     setPaperOrientation(nextDirection === 'vertical' ? 'landscape' : 'portrait')
   }
 
+  const applyPrintLink = useCallback((result: PrintLinkResult) => {
+    if (result.kind === 'absent') return
+    if (result.kind === 'too-long') {
+      setStatus({ tone: 'error', message: labels.printLinkTooLong, printLinkError: 'too-long' })
+      return
+    }
+    if (result.kind === 'invalid') {
+      setStatus({ tone: 'error', message: labels.printLinkInvalid, printLinkError: 'invalid' })
+      return
+    }
+
+    const next: PrintLinkPayload = result.payload
+    const nextDirection = next.direction ?? 'vertical'
+    setText(next.text)
+    setDirection(nextDirection)
+    setPaper(next.paper ?? 'b5')
+    setPaperOrientation(next.orientation ?? (nextDirection === 'vertical' ? 'landscape' : 'portrait'))
+    setComposition(next.composition ?? '20x20')
+    setFontFamily(next.fontFamily ?? 'mincho')
+    setFontSize(next.fontSize ?? 'normal')
+    setMargin(next.margin ?? 'standard')
+    setCustomMarginPercentage(next.customMarginPercentage ?? 20)
+    setGridColor(next.gridColor ?? '#c9ad97')
+    setAutoParagraphIndent(next.autoParagraphIndent ?? true)
+    setShowServiceMark(next.showServiceMark ?? true)
+    setStatus(null)
+  }, [labels.printLinkInvalid, labels.printLinkTooLong])
+
   useEffect(() => {
     persist('kantan:language-preference', languagePreference)
     if (languagePreference !== 'system') persist('kantan:language', languagePreference)
     document.documentElement.lang = language
   }, [language, languagePreference])
+
+  useEffect(() => {
+    setStatus((current) => current?.printLinkError === 'too-long'
+      ? { ...current, message: labels.printLinkTooLong }
+      : current?.printLinkError === 'invalid'
+        ? { ...current, message: labels.printLinkInvalid }
+        : current)
+  }, [labels.printLinkInvalid, labels.printLinkTooLong])
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
@@ -317,6 +431,12 @@ export default function App() {
   useEffect(() => {
     persist('kantan:source-text', text)
   }, [text])
+
+  useEffect(() => {
+    const handleHashChange = () => applyPrintLink(parsePrintLink(window.location.hash))
+    window.addEventListener('hashchange', handleHashChange)
+    return () => window.removeEventListener('hashchange', handleHashChange)
+  }, [applyPrintLink])
 
   useEffect(() => {
     if (!status) return
@@ -340,7 +460,7 @@ export default function App() {
       doc.save(`kantan-${paper}-${direction}.pdf`)
       setStatus({ tone: 'success', message: labels.pdfReady })
     } catch {
-      setStatus({ tone: 'error', message: labels.pdfError })
+      setStatus({ tone: 'error', message: labels.pdfError, retryPdf: true })
     } finally {
       setPending(null)
     }
@@ -410,6 +530,6 @@ export default function App() {
       <a href={`mailto:${labels.contact}`}>{labels.contact}</a>
     </footer>
 
-    {status && <div className={`toast ${status.tone}`} role="status"><span>{status.message}</span>{status.tone === 'error' && <button type="button" className="toast-retry" onClick={savePdf}>{labels.retry}</button>}<button type="button" aria-label={labels.close} onClick={() => setStatus(null)}>×</button></div>}
+    {status && <div className={`toast ${status.tone}`} role="status"><span>{status.message}</span>{status.retryPdf && <button type="button" className="toast-retry" onClick={savePdf}>{labels.retry}</button>}<button type="button" aria-label={labels.close} onClick={() => setStatus(null)}>×</button></div>}
   </main>
 }
