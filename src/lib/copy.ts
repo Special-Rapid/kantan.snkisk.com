@@ -11,33 +11,61 @@ export const copy = {
 
 export type Labels = Record<keyof typeof copy.ja, string>
 
+const aiPrintPrompt = {
+  ja: '大学の論文を作って。kantan.snkisk.comの説明を読んで、同サイトで開く本文入り印刷URLを返して。追加の質問や公開は不要。',
+  en: 'Write a college essay. Read kantan.snkisk.com\'s instructions and return a text-filled print URL that opens on that site. No follow-up questions or publishing.',
+} as const
+
+export const rootPromptCopy = {
+  ja: {
+    prefix: '',
+    topics: ['大学の論文', '謝罪文', '読書感想文', 'お礼状'],
+    suffix: 'を作って。kantan.snkisk.comの説明を読んで、同サイトで開く本文入り印刷URLを返して。追加の質問や公開は不要。',
+  },
+  en: {
+    prefix: 'Write ',
+    topics: ['a college essay', 'an apology letter', 'a book report', 'a thank-you letter'],
+    suffix: '. Read kantan.snkisk.com\'s instructions and return a text-filled print URL that opens on that site. No follow-up questions or publishing.',
+  },
+} as const
+
 export const documentationCopy = {
   ja: {
     title: 'AIから印刷する — kantan',
     eyebrow: 'kantan documentation',
     heading: 'AIで作った文章を、そのまま原稿用紙にする',
-    lead: 'AIにkantanで印刷したいと伝えると、本文と設定を入れたリンクを作成できます。リンクを開いたら、内容を確認してPDF保存または印刷を押すだけです。',
+    lead: '下の依頼文は、作りたい文章を伝え、kantanの説明を読んだうえで本文入り印刷URLを返してもらうための例です。リンクを開き、内容を確認して印刷またはPDF保存してください。',
     instructionHeading: 'AIへの伝え方',
-    instruction: '作文を作ってもらった後、次のように依頼してください。AIがこの仕様を利用できる場合は、本文入りのkantanリンクを返します。',
-    examplePrompt: 'この文章を kantan.snkisk.com で、20字×20行の縦書き原稿用紙として印刷できるリンクにして。',
+    instruction: '題材を伝え、サイトの説明を確認して本文入り印刷URLを返すように頼みます。',
+    examplePrompt: aiPrintPrompt.ja,
+    promptGroupLabel: 'AIへの印刷依頼文',
+    copyPrompt: '依頼文をコピー',
+    copiedPrompt: 'コピーしました',
+    copyingPrompt: 'コピー中…',
+    copyPromptError: 'コピーできませんでした。文章を選択してコピーしてください。',
     privacyHeading: '共有するときの注意',
     privacy: '本文と設定はURLの # より後ろに入ります。この部分はサイトへ送信されませんが、リンクを受け取った人には本文を読まれるため、個人情報や秘密の文章は共有しないでください。',
-    fallbackHeading: 'リンクを作れないAIの場合',
-    fallback: 'AIが仕様を参照できないときは、文章をコピーしてkantanの本文欄に貼り付ければ、同じように印刷できます。',
+    fallbackHeading: 'HTMLファイルが返ってきた場合',
+    fallback: 'kantanはファイルのアップロードには対応していません。「大学の論文を作って。kantan.snkisk.comの説明を読んで、同サイトで開く本文入り印刷URLを返して」と頼み直してください。それでもリンクを作れない場合は、文章をコピーしてkantanの本文欄に貼り付けてください。',
     start: 'kantanを開く',
   },
   en: {
     title: 'Print from AI — kantan',
     eyebrow: 'kantan documentation',
     heading: 'Turn AI-written text into manuscript paper',
-    lead: 'Tell an AI that you want to print with kantan. It can create a link containing your text and settings; open it, review the result, then save as PDF or print.',
+    lead: 'The prompt below tells the AI what to write, asks it to read kantan\'s instructions, and requests a print URL with the text already filled in. Open the link, review the preview, then print or save as PDF.',
     instructionHeading: 'What to ask the AI',
-    instruction: 'After the AI creates your text, make a request like this. An AI that can use this specification can return a kantan link with the text included.',
-    examplePrompt: 'Create a kantan.snkisk.com link that prints this text on vertical 20 × 20 manuscript paper.',
+    instruction: 'Name the kind of text you want and ask the AI to read the site instructions before returning a text-filled print URL.',
+    examplePrompt: aiPrintPrompt.en,
+    promptGroupLabel: 'AI print request',
+    copyPrompt: 'Copy prompt',
+    copiedPrompt: 'Copied',
+    copyingPrompt: 'Copying…',
+    copyPromptError: 'Could not copy. Select and copy the text instead.',
     privacyHeading: 'Sharing notice',
     privacy: 'The text and settings are placed after # in the URL. That portion is not sent to the site, but anyone who receives the link can read the text. Do not share private or sensitive writing this way.',
-    fallbackHeading: 'If the AI cannot create a link',
-    fallback: 'Copy the text and paste it into kantan. You can then choose the same layout and print it normally.',
+    fallbackHeading: 'If the AI returns an HTML file',
+    fallback: 'kantan does not accept file uploads. If the AI returns an artifact or asks what topic to write about, ask it to read kantan.snkisk.com and return a text-filled print URL that opens on that same site without publishing or asking a follow-up. If it still cannot create a link, copy the text and paste it into kantan.',
     start: 'Open kantan',
   },
 } as const

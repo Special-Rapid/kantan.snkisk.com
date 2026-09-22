@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { copy, documentationCopy, type Labels, type Language } from './lib/copy'
+import { copy, documentationCopy, rootPromptCopy, type Labels, type Language } from './lib/copy'
 import { manuscriptCharacters, manuscriptDisplayCells, manuscriptPages, pageTotal, type Direction, type ManuscriptCell } from './lib/layout'
 import { gridMetricsForFrame, type GridMetrics } from './lib/grid-metrics'
 import { parsePrintLink, type PrintLinkPayload, type PrintLinkResult } from './lib/print-link'
@@ -68,6 +68,134 @@ function InfoButton({ label, content }: { label: string; content: string }) {
     <button type="button" className="info-button" aria-label={label} aria-expanded={open} onClick={() => setOpen(!open)}>i</button>
     {open && <span role="status" className="info-popover">{content}</span>}
   </span>
+}
+
+type PromptCopyLabels = {
+  copyPrompt: string
+  copyingPrompt: string
+  copiedPrompt: string
+  copyPromptError: string
+}
+
+function PromptCopyButton({ text, labels, compact = false }: { text: string; labels: PromptCopyLabels; compact?: boolean }) {
+  const [status, setStatus] = useState<'idle' | 'copying' | 'copied' | 'error'>('idle')
+  const latestText = useRef(text)
+
+  useEffect(() => {
+    latestText.current = text
+    setStatus((current) => current === 'error' || current === 'copying' ? current : 'idle')
+  }, [text])
+
+  const copyPrompt = async () => {
+    const promptToCopy = text
+    setStatus('copying')
+    try {
+      await navigator.clipboard.writeText(promptToCopy)
+      if (latestText.current === promptToCopy) setStatus('copied')
+      else setStatus((current) => current === 'copying' ? 'idle' : current)
+    } catch {
+      if (latestText.current === promptToCopy) setStatus('error')
+      else setStatus((current) => current === 'copying' ? 'idle' : current)
+    }
+  }
+
+  return <div className={`prompt-copy-control${compact ? ' prompt-copy-control-compact' : ''}`}>
+    <button type="button" className="prompt-copy-button" onClick={copyPrompt} disabled={status === 'copying'} aria-busy={status === 'copying'} aria-label={compact ? labels.copyPrompt : undefined} title={compact ? labels.copyPrompt : undefined}>
+      {compact
+        ? status === 'copied'
+          ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.2 4.2L19 6.8" /></svg>
+          : status === 'error'
+            ? <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v6m0 4h.01" /></svg>
+            : <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>
+        : status === 'copied' ? labels.copiedPrompt : status === 'copying' ? labels.copyingPrompt : labels.copyPrompt}
+    </button>
+    <span className={status === 'error' ? 'prompt-copy-status' : 'sr-only'} role="status" aria-live="polite">
+      {status === 'copied' ? labels.copiedPrompt : status === 'error' ? labels.copyPromptError : ''}
+    </span>
+  </div>
+}
+
+function TypewriterPrompt({ topics, onTopicChange }: { topics: readonly string[]; onTopicChange: (index: number) => void }) {
+  const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+  const [visibleText, setVisibleText] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches ? topics[0] : '')
+
+  useEffect(() => {
+    const preference = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const updatePreference = () => setReducedMotion(preference.matches)
+    preference.addEventListener('change', updatePreference)
+    return () => preference.removeEventListener('change', updatePreference)
+  }, [])
+
+  useEffect(() => {
+    if (topics.length === 0) return
+
+    if (reducedMotion) {
+      onTopicChange(0)
+      setVisibleText(topics[0])
+      return
+    }
+
+    let topicIndex = 0
+    let current = 0
+    let timer = 0
+    let phase: 'typing' | 'hold' | 'erasing' | 'pause' = 'typing'
+    onTopicChange(0)
+    setVisibleText('')
+
+    const advance = () => {
+      const topic = topics[topicIndex]
+      if (phase === 'typing') {
+        current = Math.min(topic.length, current + 1)
+        setVisibleText(topic.slice(0, current))
+        if (current === topic.length) {
+          phase = 'hold'
+          timer = window.setTimeout(advance, 1350)
+        } else {
+          timer = window.setTimeout(advance, 72)
+        }
+      } else if (phase === 'hold') {
+        phase = 'erasing'
+        timer = window.setTimeout(advance, 240)
+      } else if (phase === 'erasing') {
+        current = Math.max(0, current - 1)
+        setVisibleText(topic.slice(0, current))
+        if (current === 0) {
+          phase = 'pause'
+          timer = window.setTimeout(advance, 350)
+        } else {
+          timer = window.setTimeout(advance, 28)
+        }
+      } else {
+        topicIndex = (topicIndex + 1) % topics.length
+        onTopicChange(topicIndex)
+        phase = 'typing'
+        timer = window.setTimeout(advance, 180)
+      }
+    }
+
+    timer = window.setTimeout(advance, 180)
+    return () => window.clearTimeout(timer)
+  }, [onTopicChange, reducedMotion, topics])
+
+  return <span className="root-prompt-subject-animated">{visibleText}</span>
+}
+
+function RootPrintPrompt({ prompt, labels }: { prompt: (typeof rootPromptCopy)[Language]; labels: PromptCopyLabels & { promptGroupLabel: string } }) {
+  const [topicIndex, setTopicIndex] = useState(0)
+  const longestTopic = prompt.topics.reduce((longest, topic) => topic.length > longest.length ? topic : longest, prompt.topics[0])
+  const fullPrompt = `${prompt.prefix}${prompt.topics[topicIndex]}${prompt.suffix}`
+  const reservedPrompt = `${prompt.prefix}${longestTopic}${prompt.suffix}`
+
+  return <div className="root-prompt" role="group" aria-label={labels.promptGroupLabel}>
+    <div className="root-prompt-textbox">
+      <span className="root-prompt-reserve" aria-hidden="true">{reservedPrompt}</span>
+      <span className="root-prompt-visible" aria-hidden="true">
+        {prompt.prefix}<span className="root-prompt-subject-wrap"><span className="root-prompt-subject-reserve">{longestTopic}</span><TypewriterPrompt topics={prompt.topics} onTopicChange={setTopicIndex} /></span>{prompt.suffix}
+      </span>
+      <span className="sr-only">{fullPrompt}</span>
+    </div>
+    <PromptCopyButton text={fullPrompt} labels={labels} compact />
+  </div>
 }
 
 function DirectionControl({ value, onChange, labels }: { value: Direction; onChange: (direction: Direction) => void; labels: Labels }) {
@@ -286,7 +414,10 @@ function DocumentationApp() {
       <p className="docs-lead">{documentCopy.lead}</p>
 
       <section aria-labelledby="docs-instruction">
-        <h2 id="docs-instruction">{documentCopy.instructionHeading}</h2>
+        <div className="docs-prompt-heading">
+          <h2 id="docs-instruction">{documentCopy.instructionHeading}</h2>
+          <PromptCopyButton key={documentCopy.examplePrompt} text={documentCopy.examplePrompt} labels={documentCopy} />
+        </div>
         <p>{documentCopy.instruction}</p>
         <pre><code>{documentCopy.examplePrompt}</code></pre>
       </section>
@@ -484,6 +615,8 @@ function ManuscriptApp() {
         <ThemeToggle value={theme} onChange={setTheme} labels={labels} />
       </div>
     </header>
+
+    <RootPrintPrompt key={language} prompt={rootPromptCopy[language]} labels={documentationCopy[language]} />
 
     <div className="workspace">
       <section className="editor" aria-label={labels.body}>

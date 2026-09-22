@@ -29,10 +29,31 @@ button:focus-visible, select:focus-visible, textarea:focus-visible, summary:focu
 .docs-article { width: min(100%, 760px); margin: clamp(36px, 8vw, 88px) auto 0; padding: clamp(24px, 5vw, 52px); border: 1px solid var(--line); border-radius: calc(var(--radius) * 2); background: var(--surface); box-shadow: 0 12px 32px var(--shadow); }
 .docs-eyebrow { margin: 0 0 var(--space-2); color: var(--muted); font-size: 13px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .docs-article h1 { margin: 0; font-size: clamp(28px, 5vw, 42px); letter-spacing: -.04em; line-height: 1.2; }
-.docs-article h2 { margin: var(--space-5) 0 var(--space-2); font-size: 19px; }
+.docs-prompt-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-5) 0 var(--space-2); }
+.docs-article h2 { margin: 0; font-size: 19px; }
+.docs-article section + section h2 { margin: var(--space-5) 0 var(--space-2); }
 .docs-article p { margin: 0; color: var(--ink); line-height: 1.8; }
 .docs-lead { margin-top: var(--space-3) !important; color: var(--muted) !important; font-size: 17px; }
-.docs-article pre { overflow-x: auto; margin: var(--space-3) 0 0; padding: var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--bg); color: var(--ink); font: 14px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+.docs-article pre { overflow-x: auto; overflow-wrap: anywhere; margin: var(--space-3) 0 0; padding: var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--bg); color: var(--ink); font: 14px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+.prompt-copy-control { display: grid; justify-items: stretch; min-width: 0; }
+.prompt-copy-button { min-width: 112px; min-height: 44px; padding: 0 var(--space-2); border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); color: var(--ink); cursor: pointer; font: inherit; font-weight: 700; white-space: normal; }
+.prompt-copy-button:hover { border-color: var(--ink); }
+.prompt-copy-button:disabled { cursor: wait; opacity: .72; }
+.prompt-copy-button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.prompt-copy-status { min-height: 1.5em; margin: var(--space-1) 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.root-prompt { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: var(--space-2); margin-top: var(--space-4); }
+.root-prompt-textbox { display: grid; grid-template-areas: "prompt"; align-items: center; min-width: 0; min-height: 44px; padding: 10px 14px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); color: var(--ink); font-size: clamp(14px, 1.25vw, 16px); font-weight: 550; line-height: 1.6; }
+.root-prompt-reserve, .root-prompt-visible { grid-area: prompt; min-width: 0; overflow-wrap: anywhere; white-space: normal; }
+.root-prompt-reserve, .root-prompt-subject-reserve { visibility: hidden; pointer-events: none; }
+.root-prompt-visible { display: block; }
+.root-prompt-subject-wrap { display: inline-grid; grid-template-areas: "subject"; vertical-align: baseline; }
+.root-prompt-subject-reserve, .root-prompt-subject-animated { grid-area: subject; min-width: 0; white-space: nowrap; }
+.root-prompt-subject-animated { opacity: 1; transition: opacity 120ms ease-out; }
+.prompt-copy-control-compact { display: contents; }
+.prompt-copy-control-compact .prompt-copy-button { display: grid; width: 44px; min-width: 44px; height: 44px; min-height: 44px; place-items: center; padding: 0; }
+.prompt-copy-control-compact .prompt-copy-button { grid-column: 2; grid-row: 1; }
+.prompt-copy-control-compact .prompt-copy-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.prompt-copy-control-compact .prompt-copy-status { grid-column: 1 / -1; grid-row: 2; width: auto; justify-self: stretch; text-align: left; }
 .docs-start-link { display: inline-flex; min-height: 48px; align-items: center; margin-top: var(--space-5); padding: 0 var(--space-3); border: 1px solid var(--ink); border-radius: var(--radius); background: var(--ink); color: var(--bg); font-weight: 750; text-decoration: none; }
 .editor { padding-top: var(--space-2); }
 .field-group { border: 0; padding: 0; margin: 0 0 var(--space-3); min-width: 0; }
@@ -106,12 +127,13 @@ textarea { min-height: 348px; padding: var(--space-3); line-height: 1.75; resize
 @media (max-width: 780px) { .app-shell { padding: var(--space-2) var(--space-3) var(--space-5); }.site-header { min-height: 56px; }.brand { font-size: 26px; }.workspace { grid-template-columns: 1fr; gap: var(--space-5); padding-top: var(--space-4); }.site-footer { justify-content: center; text-align: center; } textarea { min-height: 280px; }.detail-grid { grid-template-columns: 1fr; }.custom-margin-control, .paper-orientation-control, .mark-control { grid-column: auto; }.preview-capture { padding: var(--space-2); }.toast { right: var(--space-3); bottom: max(var(--space-3), env(safe-area-inset-bottom)); } }
 @media (max-width: 560px) { .site-header { align-items: flex-start; flex-wrap: wrap; padding: var(--space-1) 0; }.header-preferences { width: 100%; flex-direction: column; align-items: flex-end; }.language-toggle, .theme-toggle { max-width: 100%; } }
 @media (max-width: 360px) { .site-header { gap: 4px; }.brand { font-size: 24px; } }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) { .root-prompt-textbox:hover .root-prompt-subject-animated { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; } }
 @page b5-portrait { size: 182mm 257mm; margin: 4mm; }
 @page b5-landscape { size: 257mm 182mm; margin: 4mm; }
 @page a4-portrait { size: 210mm 297mm; margin: 4mm; }
 @page a4-landscape { size: 297mm 210mm; margin: 4mm; }
-@media print { :root, body { background: var(--paper-bg); }.site-header, .editor, .preview-heading, .site-footer, .toast { display: none !important; }.app-shell { padding: 0; max-width: none; }.workspace { display: block; padding: 0; }.preview-panel { display: block; }.preview-capture { display: block; padding: 0; background: var(--paper-bg); }.paper-wrap { box-sizing: border-box; width: calc(var(--print-paper-width) - 8mm); height: calc(var(--print-paper-height) - 8mm); max-width: none; overflow: hidden; break-after: page; break-inside: avoid-page; }.paper-wrap:last-child { break-after: auto; }.paper-meta, .page-footer { display: none; }.paper { width: 100%; height: 100%; aspect-ratio: auto; box-shadow: none; padding-block: var(--print-paper-block-margin); padding-inline: var(--print-paper-inline-margin); --service-mark-bottom: var(--print-service-mark-bottom); --cell-size: var(--print-cell-size) !important; --line-band-size: var(--print-line-band-size) !important; --cross-band-size: var(--print-cross-band-size) !important; --spine-band-size: var(--print-spine-band-size) !important; } }
+@media print { :root, body { background: var(--paper-bg); }.site-header, .root-prompt, .editor, .preview-heading, .site-footer, .toast { display: none !important; }.app-shell { padding: 0; max-width: none; }.workspace { display: block; padding: 0; }.preview-panel { display: block; }.preview-capture { display: block; padding: 0; background: var(--paper-bg); }.paper-wrap { box-sizing: border-box; width: calc(var(--print-paper-width) - 8mm); height: calc(var(--print-paper-height) - 8mm); max-width: none; overflow: hidden; break-after: page; break-inside: avoid-page; }.paper-wrap:last-child { break-after: auto; }.paper-meta, .page-footer { display: none; }.paper { width: 100%; height: 100%; aspect-ratio: auto; box-shadow: none; padding-block: var(--print-paper-block-margin); padding-inline: var(--print-paper-inline-margin); --service-mark-bottom: var(--print-service-mark-bottom); --cell-size: var(--print-cell-size) !important; --line-band-size: var(--print-line-band-size) !important; --cross-band-size: var(--print-cross-band-size) !important; --spine-band-size: var(--print-spine-band-size) !important; } }
 .paper.page-b5.orientation-portrait { page: b5-portrait; }
 .paper.page-b5.orientation-landscape { page: b5-landscape; }
 .paper.page-a4.orientation-portrait { page: a4-portrait; }
