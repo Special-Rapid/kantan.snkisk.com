@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import worker, { type Env } from './worker'
+import worker, { renderDocumentationHtml, type Env } from './worker'
+
+const assetHtml = `<!doctype html><html><head><meta name="description" content="home"><link rel="canonical" href="https://kantan.snkisk.com/"><meta property="og:title" content="home"><meta property="og:description" content="home"><meta property="og:url" content="https://kantan.snkisk.com/"><meta name="twitter:title" content="home"><meta name="twitter:description" content="home"><title>home</title><script type="application/ld+json" id="website-structured-data">{"name":"簡単印刷"}</script></head><body><main id="seo-fallback" class="seo-fallback"><h1>root fallback</h1></main></body></html>`
 
 const withAssets = (contentType = 'text/html; charset=utf-8') => {
   const requests: string[] = []
@@ -7,7 +9,7 @@ const withAssets = (contentType = 'text/html; charset=utf-8') => {
     ASSETS: {
       fetch: async (request) => {
         requests.push(new URL(request.url).pathname)
-        return new Response('<!doctype html><title>asset</title>', { headers: { 'content-type': contentType } })
+        return new Response(assetHtml, { headers: { 'content-type': contentType } })
       },
     },
   }
@@ -15,21 +17,29 @@ const withAssets = (contentType = 'text/html; charset=utf-8') => {
 }
 
 describe('WorkerのAI仕様と文書host', () => {
-  it('rootのHTMLだけに画面非表示のAI仕様Linkヘッダーを付ける', async () => {
+  it('rootのHTMLにAI仕様Linkヘッダーを付ける', async () => {
     const { env, requests } = withAssets()
     const response = await worker.fetch(new Request('https://kantan.snkisk.com/'), env)
 
     expect(requests).toEqual(['/'])
     expect(response.headers.get('link')).toContain('https://kantan.snkisk.com/llms.txt')
     expect(response.headers.get('link')).toContain('rel="alternate"')
+    expect(response.headers.get('link')).toContain("title*=UTF-8''%E7%B0%A1%E5%8D%98%E5%8D%B0%E5%88%B7%20AI%E5%8D%B0%E5%88%B7%E3%83%AA%E3%83%B3%E3%82%AF%E4%BB%95%E6%A7%98")
   })
 
-  it('文書hostのrootは人向け文書画面へ解決する', async () => {
+  it('docs hostのHTMLに固有のSEO情報と静的本文を返す', async () => {
     const { env, requests } = withAssets()
     const response = await worker.fetch(new Request('https://docs.kantan.snkisk.com/'), env)
+    const html = await response.text()
 
     expect(requests).toEqual(['/docs'])
     expect(response.headers.get('link')).toBeNull()
+    expect(response.headers.get('content-type')).toContain('text/html')
+    expect(html).toContain('<title>簡単印刷の使い方｜AIで文章と印刷リンクを作る</title>')
+    expect(html).toContain('content="https://docs.kantan.snkisk.com/"')
+    expect(html).toContain('AIの文章を、簡単印刷で原稿用紙に')
+    expect(html).not.toContain('root fallback')
+    expect(html).toContain('"name":"簡単印刷"')
   })
 
   it('root以外とHTML以外へAI仕様ヘッダーを広げない', async () => {
@@ -38,5 +48,38 @@ describe('WorkerのAI仕様と文書host', () => {
 
     expect(requests).toEqual(['/llms.txt'])
     expect(response.headers.get('link')).toBeNull()
+  })
+
+  it('docs hostのrobotsとsitemapをsubdomain専用資産へ解決する', async () => {
+    const { env, requests } = withAssets('text/plain; charset=utf-8')
+    await worker.fetch(new Request('https://docs.kantan.snkisk.com/robots.txt'), env)
+    await worker.fetch(new Request('https://docs.kantan.snkisk.com/sitemap.xml'), env)
+
+    expect(requests).toEqual(['/docs-robots.txt', '/docs-sitemap.xml'])
+  })
+
+  it('root hostの/docsもdocs canonicalへ揃える', async () => {
+    const { env, requests } = withAssets()
+    const response = await worker.fetch(new Request('https://kantan.snkisk.com/docs'), env)
+    const html = await response.text()
+
+    expect(requests).toEqual(['/docs'])
+    expect(html).toContain('https://docs.kantan.snkisk.com/')
+  })
+
+  it('docs headの置換でcontent-length・encoding・etagを残さない', async () => {
+    const response = new Response(assetHtml, { headers: { 'content-type': 'text/html', 'content-length': '1', 'content-encoding': 'identity', etag: 'stale' } })
+    const env: Env = { ASSETS: { fetch: async () => response } }
+    const result = await worker.fetch(new Request('https://docs.kantan.snkisk.com/'), env)
+
+    expect(result.headers.get('content-length')).toBeNull()
+    expect(result.headers.get('content-encoding')).toBeNull()
+    expect(result.headers.get('etag')).toBeNull()
+  })
+
+  it('metadata helper escapes replacement text and rewrites docs canonical and fallback', () => {
+    const html = renderDocumentationHtml(assetHtml)
+    expect(html).toContain('<link rel="canonical" href="https://docs.kantan.snkisk.com/" />')
+    expect(html).toContain('<main id="seo-fallback" class="seo-fallback">')
   })
 })

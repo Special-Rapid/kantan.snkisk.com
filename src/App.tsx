@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { copy, documentationCopy, rootPromptCopy, type Labels, type Language } from './lib/copy'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { copy, documentationCopy, homepageCopy, rootPromptCopy, type Labels, type Language } from './lib/copy'
 import { manuscriptCharacters, manuscriptDisplayCells, manuscriptPages, pageTotal, type Direction, type ManuscriptCell } from './lib/layout'
 import { gridMetricsForFrame, type GridMetrics } from './lib/grid-metrics'
 import { parsePrintLink, type PrintLinkPayload, type PrintLinkResult } from './lib/print-link'
@@ -47,6 +47,25 @@ const paperOrientationOptions = ['portrait', 'landscape'] as const
 const marginPercentages: Record<Exclude<Margin, 'custom'>, number> = { narrow: 10, standard: 20, wide: 30 }
 const cssPixelInMillimeters = 25.4 / 96
 
+function updateDocumentMetadata(title: string, description: string) {
+  document.title = title
+  document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute('content', description)
+  document.querySelector<HTMLMetaElement>('meta[property="og:title"]')?.setAttribute('content', title)
+  document.querySelector<HTMLMetaElement>('meta[property="og:description"]')?.setAttribute('content', description)
+  document.querySelector<HTMLMetaElement>('meta[name="twitter:title"]')?.setAttribute('content', title)
+  document.querySelector<HTMLMetaElement>('meta[name="twitter:description"]')?.setAttribute('content', description)
+}
+
+function updateThemeColor(theme: 'light' | 'dark') {
+  document.documentElement.dataset.theme = theme
+  const color = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
+  if (color) document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute('content', color)
+}
+
+function brandIconSource(theme: Theme, systemDark: boolean) {
+  return theme === 'dark' || (theme === 'system' && systemDark) ? '/brand-icon-dark.svg' : '/brand-icon.svg'
+}
+
 function stored<T>(key: string, fallback: T): T {
   try { return (localStorage.getItem(key) as T) || fallback } catch { return fallback }
 }
@@ -77,7 +96,7 @@ type PromptCopyLabels = {
   copyPromptError: string
 }
 
-function PromptCopyButton({ text, labels, compact = false }: { text: string; labels: PromptCopyLabels; compact?: boolean }) {
+function PromptCopyButton({ text, labels, compact = false, children }: { text: string; labels: PromptCopyLabels; compact?: boolean; children?: ReactNode }) {
   const [status, setStatus] = useState<'idle' | 'copying' | 'copied' | 'error'>('idle')
   const latestText = useRef(text)
 
@@ -102,11 +121,14 @@ function PromptCopyButton({ text, labels, compact = false }: { text: string; lab
   return <div className={`prompt-copy-control${compact ? ' prompt-copy-control-compact' : ''}`}>
     <button type="button" className="prompt-copy-button" onClick={copyPrompt} disabled={status === 'copying'} aria-busy={status === 'copying'} aria-label={compact ? labels.copyPrompt : undefined} title={compact ? labels.copyPrompt : undefined}>
       {compact
-        ? status === 'copied'
+        ? <>
+          {children}
+          <span className="prompt-copy-button-icon" aria-hidden="true">{status === 'copied'
           ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4.2 4.2L19 6.8" /></svg>
           : status === 'error'
             ? <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v6m0 4h.01" /></svg>
-            : <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>
+            : <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>}</span>
+        </>
         : status === 'copied' ? labels.copiedPrompt : status === 'copying' ? labels.copyingPrompt : labels.copyPrompt}
     </button>
     <span className={status === 'error' ? 'prompt-copy-status' : 'sr-only'} role="status" aria-live="polite">
@@ -187,14 +209,12 @@ function RootPrintPrompt({ prompt, labels }: { prompt: (typeof rootPromptCopy)[L
   const reservedPrompt = `${prompt.prefix}${longestTopic}${prompt.suffix}`
 
   return <div className="root-prompt" role="group" aria-label={labels.promptGroupLabel}>
-    <div className="root-prompt-textbox">
+    <PromptCopyButton text={fullPrompt} labels={labels} compact>
       <span className="root-prompt-reserve" aria-hidden="true">{reservedPrompt}</span>
       <span className="root-prompt-visible" aria-hidden="true">
         {prompt.prefix}<span className="root-prompt-subject-wrap"><span className="root-prompt-subject-reserve">{longestTopic}</span><TypewriterPrompt topics={prompt.topics} onTopicChange={setTopicIndex} /></span>{prompt.suffix}
       </span>
-      <span className="sr-only">{fullPrompt}</span>
-    </div>
-    <PromptCopyButton text={fullPrompt} labels={labels} compact />
+    </PromptCopyButton>
   </div>
 }
 
@@ -360,7 +380,7 @@ function ManuscriptPage({ direction, paper, paperOrientation, composition, cells
             : <div className="manuscript-grid" aria-label={hasText ? `${labels.sourceCount} ${manuscriptCharacters(cells.join('')).length}${labels.sourceSuffix}` : labels.blank}>{displayCells.map((cell, index) => <span key={index} className="manuscript-cell">{cell}</span>)}</div>}
       </div>
       {!hasText && <p className="empty-paper">{labels.blank}</p>}
-      {canShowServiceMark && <span className="service-mark" aria-hidden="true">{labels.serviceName}</span>}
+      {canShowServiceMark && <span className="service-mark" aria-hidden="true">簡単印刷</span>}
     </div>
     <div className="page-footer">{labels.page} {page} / {total}</div>
   </section>
@@ -379,13 +399,14 @@ function DocumentationApp() {
   const language = languagePreference === 'system' ? defaultLanguage() : languagePreference
   const labels: Labels = copy[language]
   const documentCopy = documentationCopy[language]
+  const brandIcon = brandIconSource(theme, systemDark)
 
   useEffect(() => {
     persist('kantan:language-preference', languagePreference)
     if (languagePreference !== 'system') persist('kantan:language', languagePreference)
     document.documentElement.lang = language
-    document.title = documentCopy.title
-  }, [documentCopy.title, language, languagePreference])
+    updateDocumentMetadata(documentCopy.title, documentCopy.description)
+  }, [documentCopy.description, documentCopy.title, language, languagePreference])
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
@@ -396,12 +417,12 @@ function DocumentationApp() {
 
   useEffect(() => {
     persist('kantan:theme', theme)
-    document.documentElement.dataset.theme = theme === 'system' ? (systemDark ? 'dark' : 'light') : theme
+    updateThemeColor(theme === 'system' ? (systemDark ? 'dark' : 'light') : theme)
   }, [systemDark, theme])
 
   return <main className="app-shell docs-shell">
     <header className="site-header">
-      <a className="brand" href="https://kantan.snkisk.com/" aria-label="kantan home">kantan</a>
+      <a className="brand" href="https://kantan.snkisk.com/" aria-label="簡単印刷 ホーム"><img src={brandIcon} alt="" aria-hidden="true" /><span>簡単印刷</span></a>
       <div className="header-preferences">
         <LanguageToggle value={languagePreference} onChange={setLanguagePreference} labels={labels} />
         <ThemeToggle value={theme} onChange={setTheme} labels={labels} />
@@ -464,6 +485,8 @@ function ManuscriptApp() {
   const previewRef = useRef<HTMLDivElement>(null)
   const language = languagePreference === 'system' ? defaultLanguage() : languagePreference
   const labels: Labels = copy[language]
+  const homeCopy = homepageCopy[language]
+  const brandIcon = brandIconSource(theme, systemDark)
   const [status, setStatus] = useState<Status>(() => initialPrintLink.kind === 'too-long'
     ? { tone: 'error', message: labels.printLinkTooLong, printLinkError: 'too-long' }
     : initialPrintLink.kind === 'invalid' ? { tone: 'error', message: labels.printLinkInvalid, printLinkError: 'invalid' } : null)
@@ -537,7 +560,8 @@ function ManuscriptApp() {
     persist('kantan:language-preference', languagePreference)
     if (languagePreference !== 'system') persist('kantan:language', languagePreference)
     document.documentElement.lang = language
-  }, [language, languagePreference])
+    updateDocumentMetadata(homeCopy.title, homeCopy.description)
+  }, [homeCopy.description, homeCopy.title, language, languagePreference])
 
   useEffect(() => {
     setStatus((current) => current?.printLinkError === 'too-long'
@@ -556,7 +580,7 @@ function ManuscriptApp() {
 
   useEffect(() => {
     persist('kantan:theme', theme)
-    document.documentElement.dataset.theme = theme === 'system' ? (systemDark ? 'dark' : 'light') : theme
+    updateThemeColor(theme === 'system' ? (systemDark ? 'dark' : 'light') : theme)
   }, [systemDark, theme])
 
   useEffect(() => {
@@ -588,7 +612,7 @@ function ManuscriptApp() {
         if (index > 0) doc.addPage([selectedPaper.width, selectedPaper.height])
         doc.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, selectedPaper.width, selectedPaper.height)
       }
-      doc.save(`kantan-${paper}-${direction}.pdf`)
+      doc.save(`簡単印刷-${paper}-${direction}.pdf`)
       setStatus({ tone: 'success', message: labels.pdfReady })
     } catch {
       setStatus({ tone: 'error', message: labels.pdfError, retryPdf: true })
@@ -609,12 +633,18 @@ function ManuscriptApp() {
 
   return <main className="app-shell">
     <header className="site-header">
-      <a className="brand" href="/" aria-label="kantan home">kantan</a>
+      <a className="brand" href="/" aria-label="簡単印刷 ホーム"><img src={brandIcon} alt="" aria-hidden="true" /><span>簡単印刷</span></a>
       <div className="header-preferences">
         <LanguageToggle value={languagePreference} onChange={setLanguagePreference} labels={labels} />
         <ThemeToggle value={theme} onChange={setTheme} labels={labels} />
       </div>
     </header>
+
+    <section className="home-intro" aria-labelledby="home-heading">
+      <h1 id="home-heading">{homeCopy.heading}</h1>
+      <p>{homeCopy.introduction}</p>
+      <a href="https://docs.kantan.snkisk.com/">{homeCopy.docsLink}</a>
+    </section>
 
     <RootPrintPrompt key={language} prompt={rootPromptCopy[language]} labels={documentationCopy[language]} />
 
@@ -640,7 +670,7 @@ function ManuscriptApp() {
             <label>{labels.gridColor}<span className="color-control"><input aria-label={labels.gridColor} type="color" value={gridColor} onChange={(event) => setGridColor(event.target.value)} /><output>{gridColor}</output></span></label>
             <div className="paper-orientation-control"><span id="paper-orientation-label">{labels.paperOrientation}</span><PaperOrientationControl value={paperOrientation} onChange={setPaperOrientation} labels={labels} labelId="paper-orientation-label" /></div>
             <label className="mark-control"><input type="checkbox" checked={autoParagraphIndent} onChange={(event) => setAutoParagraphIndent(event.target.checked)} /><span>{labels.paragraphIndent}</span></label>
-            <label className="mark-control"><input type="checkbox" checked={showServiceMark} onChange={(event) => setShowServiceMark(event.target.checked)} /><span>{labels.serviceMark}</span></label>
+            <label className="mark-control"><input type="checkbox" checked={showServiceMark} onChange={(event) => setShowServiceMark(event.target.checked)} /><span>{language === 'ja' ? '紙面左下に 簡単印刷 を入れる' : 'Add 簡単印刷 at the lower left'}</span></label>
           </div>
         </details>
 
@@ -651,7 +681,7 @@ function ManuscriptApp() {
       </section>
 
       <section className="preview-panel" aria-label={labels.preview}>
-        <div className="preview-heading"><h1>{labels.preview}</h1><InfoButton label={labels.info} content={labels.settingsInfo} /></div>
+        <div className="preview-heading"><h2>{labels.preview}</h2><InfoButton label={labels.info} content={labels.settingsInfo} /></div>
         <div className="preview-capture" ref={previewRef}>{layoutSupported
           ? pages.map((cells, index) => <ManuscriptPage key={index} direction={direction} paper={paper} paperOrientation={paperOrientation} composition={composition} cells={cells} page={index + 1} total={pages.length} fontFamily={fontFamily} fontSize={fontSize} margin={margin} marginPercentage={marginPercentage} gridColor={gridColor} showServiceMark={showServiceMark} printGridMetrics={printGridMetrics!} labels={labels} language={language} />)
           : <p id="layout-unavailable" className="layout-unavailable" role="status">{printMarginUnavailable ? labels.printMarginUnavailable : labels.layoutUnavailable}</p>}</div>
